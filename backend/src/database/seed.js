@@ -1,4 +1,5 @@
-const { sequelize, User, FeatureFlag, FlagState, FlagMetric } = require('../models');
+// backend/src/database/seed.js - COMPLETE FILE
+const { sequelize, User, Company, UserCompany, FeatureFlag, FlagState, FlagMetric } = require('../models');
 const logger = require('../utils/logger');
 
 async function seedDatabase() {
@@ -46,8 +47,105 @@ async function seedDatabase() {
 
     logger.info(`✅ Created ${users.length} demo users`);
 
-    // Create demo feature flags with realistic scenarios
-    const flags = await FeatureFlag.bulkCreate([
+    // CREATE DEMO COMPANIES
+    const companies = await Company.bulkCreate([
+      {
+        name: 'TechCorp Inc',
+        subdomain: 'techcorp',
+        invite_code: 'TECH2024',
+        owner_id: users.find(u => u.role === 'admin').id,
+        plan: 'enterprise',
+        settings: {
+          max_flags: 100,
+          max_users: 50,
+          max_environments: 5,
+          features: {
+            advanced_targeting: true,
+            approval_workflows: true,
+            audit_logs: true,
+            api_access: true
+          }
+        }
+      },
+      {
+        name: 'StartupXYZ',
+        subdomain: 'startupxyz',
+        invite_code: 'START123',
+        owner_id: users.find(u => u.role === 'pm').id,
+        plan: 'pro',
+        settings: {
+          max_flags: 75,
+          max_users: 25,
+          max_environments: 4,
+          features: {
+            advanced_targeting: true,
+            approval_workflows: false,
+            audit_logs: true,
+            api_access: true
+          }
+        }
+      },
+      {
+        name: 'DevShop',
+        subdomain: 'devshop',
+        invite_code: 'DEVS456',
+        owner_id: users.find(u => u.role === 'engineer').id,
+        plan: 'starter',
+        settings: {
+          max_flags: 50,
+          max_users: 10,
+          max_environments: 3,
+          features: {
+            advanced_targeting: false,
+            approval_workflows: false,
+            audit_logs: true,
+            api_access: true
+          }
+        }
+      }
+    ], { returning: true });
+
+    logger.info(`✅ Created ${companies.length} demo companies`);
+
+    // CREATE USER-COMPANY RELATIONSHIPS
+    const userCompanies = [];
+    
+    // TechCorp - all users are members
+    for (const user of users) {
+      userCompanies.push({
+        user_id: user.id,
+        company_id: companies[0].id, // TechCorp
+        role: user.role === 'admin' ? 'owner' : 'member',
+        status: 'active'
+      });
+    }
+
+    // StartupXYZ - subset of users
+    for (const user of users.slice(0, 3)) {
+      userCompanies.push({
+        user_id: user.id,
+        company_id: companies[1].id, // StartupXYZ
+        role: user.username === 'alice_pm' ? 'owner' : 'member',
+        status: 'active'
+      });
+    }
+
+    // DevShop - smaller team
+    for (const user of users.slice(1, 3)) {
+      userCompanies.push({
+        user_id: user.id,
+        company_id: companies[2].id, // DevShop  
+        role: user.username === 'bob_engineer' ? 'owner' : 'member',
+        status: 'active'
+      });
+    }
+
+    await UserCompany.bulkCreate(userCompanies);
+    logger.info(`✅ Created ${userCompanies.length} user-company relationships`);
+
+    // CREATE FEATURE FLAGS FOR EACH COMPANY
+    const flagsData = [
+      // TechCorp flags
       {
         name: 'new_checkout_flow',
         description: 'New streamlined checkout process with one-click payments',
@@ -58,6 +156,7 @@ async function seedDatabase() {
         error_threshold: 0.03,
         tags: ['checkout', 'payments', 'conversion'],
         created_by: users.find(u => u.role === 'pm').id,
+        company_id: companies[0].id, // TechCorp
         metadata: {
           jira_ticket: 'SHOP-1234',
           slack_channel: '#checkout-team',
@@ -73,6 +172,7 @@ async function seedDatabase() {
         auto_disable_on_error: false,
         tags: ['ui', 'theme', 'accessibility'],
         created_by: users.find(u => u.role === 'engineer').id,
+        company_id: companies[0].id, // TechCorp
         metadata: {
           design_spec: 'https://figma.com/dark-mode',
           accessibility_tested: true
@@ -87,6 +187,7 @@ async function seedDatabase() {
         auto_disable_on_error: false,
         tags: ['premium', 'monetization', 'features'],
         created_by: users.find(u => u.role === 'pm').id,
+        company_id: companies[0].id, // TechCorp
         metadata: {
           revenue_impact: 'high',
           pricing_model: 'subscription'
@@ -102,44 +203,81 @@ async function seedDatabase() {
         error_threshold: 0.05,
         tags: ['ai', 'ml', 'recommendations', 'personalization'],
         created_by: users.find(u => u.role === 'engineer').id,
+        company_id: companies[0].id, // TechCorp
         metadata: {
           model_version: 'v2.1',
           training_data_cutoff: '2025-01-15',
           ab_test_groups: ['control', 'treatment']
         }
       },
+
+      // StartupXYZ flags
       {
-        name: 'gdpr_compliance_mode',
-        description: 'Enhanced privacy controls for EU users',
-        flag_type: 'killswitch',
-        risk_level: 'critical',
-        requires_approval: true,
+        name: 'startup_onboarding',
+        description: 'Simplified onboarding for new startup customers',
+        flag_type: 'rollout',
+        risk_level: 'medium',
+        requires_approval: false,
         auto_disable_on_error: false,
-        tags: ['privacy', 'gdpr', 'compliance', 'legal'],
-        created_by: users.find(u => u.role === 'legal').id,
+        tags: ['onboarding', 'ux'],
+        created_by: users.find(u => u.role === 'pm').id,
+        company_id: companies[1].id, // StartupXYZ
         metadata: {
-          legal_review_required: true,
-          compliance_framework: 'GDPR',
-          audit_trail: true
+          conversion_goal: 'increase_signup_completion',
+          target_improvement: '15%'
         }
       },
       {
-        name: 'mobile_push_notifications',
-        description: 'Push notification system for mobile apps',
+        name: 'social_login',
+        description: 'Google and GitHub OAuth integration',
         flag_type: 'rollout',
+        risk_level: 'low',
+        requires_approval: false,
+        auto_disable_on_error: false,
+        tags: ['auth', 'social', 'ux'],
+        created_by: users.find(u => u.role === 'engineer').id,
+        company_id: companies[1].id, // StartupXYZ
+        metadata: {
+          oauth_providers: ['google', 'github'],
+          security_review: 'completed'
+        }
+      },
+
+      // DevShop flags
+      {
+        name: 'dev_tools_beta',
+        description: 'Beta developer tools for power users',
+        flag_type: 'experiment',
+        risk_level: 'low',
+        requires_approval: false,
+        auto_disable_on_error: false,
+        tags: ['dev-tools', 'beta'],
+        created_by: users.find(u => u.role === 'engineer').id,
+        company_id: companies[2].id, // DevShop
+        metadata: {
+          beta_users: ['internal', 'power-users'],
+          feedback_channel: '#dev-tools-feedback'
+        }
+      },
+      {
+        name: 'code_review_automation',
+        description: 'Automated code review suggestions',
+        flag_type: 'experiment',
         risk_level: 'medium',
         requires_approval: false,
         auto_disable_on_error: true,
         error_threshold: 0.02,
-        tags: ['mobile', 'notifications', 'engagement'],
-        created_by: users.find(u => u.role === 'pm').id,
+        tags: ['automation', 'code-review', 'productivity'],
+        created_by: users.find(u => u.role === 'engineer').id,
+        company_id: companies[2].id, // DevShop
         metadata: {
-          platforms: ['iOS', 'Android'],
-          notification_types: ['marketing', 'transactional', 'alerts']
+          ai_model: 'code-review-v1',
+          languages: ['javascript', 'python', 'java']
         }
       }
-    ], { returning: true });
+    ];
 
+    const flags = await FeatureFlag.bulkCreate(flagsData, { returning: true });
     logger.info(`✅ Created ${flags.length} demo feature flags`);
 
     // Create flag states for different environments
@@ -181,8 +319,8 @@ async function seedDatabase() {
             targetingRules = {};
             if (flag.name === 'premium_features') {
               targetingRules = { plan: { in: ['premium', 'enterprise'] } };
-            } else if (flag.name === 'gdpr_compliance_mode') {
-              targetingRules = { country: { in: ['DE', 'FR', 'NL', 'ES', 'IT'] } };
+            } else if (flag.name.includes('beta')) {
+              targetingRules = { user_type: { in: ['beta', 'early_adopter'] } };
             } else if (rolloutPercentage < 50) {
               targetingRules = { user_type: { in: ['beta', 'early_adopter'] } };
             }
@@ -267,44 +405,14 @@ async function seedDatabase() {
     }
 
     await FlagMetric.bulkCreate(metrics);
-    logger.info(`✅ Created ${metrics.length} demo metrics`);
+    logger.info(`✅ Created ${metrics.length} demo metrics records`);
 
     logger.info('🎉 Database seeding completed successfully!');
     
-    // Print summary
-    logger.info('📊 Demo data summary:');
-    logger.info(`   Users: ${users.length} (roles: pm, engineer, qa, legal, admin)`);
-    logger.info(`   Flags: ${flags.length} (covering different risk levels and use cases)`);
-    logger.info(`   States: ${flagStates.length} (across dev/staging/prod environments)`);
-    logger.info(`   Metrics: ${metrics.length} (30 days of realistic usage data)`);
-    
-    logger.info('🚀 Ready for demo! Try these credentials:');
-    logger.info('   PM: alice_pm');
-    logger.info('   Engineer: bob_engineer');
-    logger.info('   QA: carol_qa');
-    logger.info('   Legal: david_legal');
-    logger.info('   Admin: emma_admin');
-
-    return { users, flags, flagStates, metrics };
-
   } catch (error) {
     logger.error('❌ Database seeding failed:', error);
     throw error;
   }
-}
-
-// Run seeding if called directly
-if (require.main === module) {
-  sequelize.sync({ force: true })
-    .then(() => seedDatabase())
-    .then(() => {
-      logger.info('✅ Seeding complete, exiting...');
-      process.exit(0);
-    })
-    .catch(error => {
-      logger.error('❌ Seeding failed:', error);
-      process.exit(1);
-    });
 }
 
 module.exports = { seedDatabase };

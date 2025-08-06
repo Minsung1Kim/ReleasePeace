@@ -1,3 +1,4 @@
+// backend/src/models/index.js - COMPLETE FILE
 const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 
@@ -100,180 +101,6 @@ const User = sequelize.define('User', {
     { fields: ['role'] }
   ]
 });
-
-// Feature Flags model
-const FeatureFlag = sequelize.define('FeatureFlag', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  name: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
-    unique: true
-  },
-  description: {
-    type: DataTypes.TEXT
-  },
-  flag_type: {
-    type: DataTypes.ENUM('killswitch', 'experiment', 'rollout', 'permission'),
-    defaultValue: 'rollout'
-  },
-  risk_level: {
-    type: DataTypes.ENUM('low', 'medium', 'high', 'critical'),
-    defaultValue: 'medium'
-  },
-  requires_approval: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  auto_disable_on_error: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  error_threshold: {
-    type: DataTypes.DECIMAL(3, 2),
-    defaultValue: 0.05
-  },
-  tags: {
-    type: DataTypes.ARRAY(DataTypes.STRING),
-    defaultValue: []
-  },
-  metadata: {
-    type: DataTypes.JSONB,
-    defaultValue: {}
-  },
-  is_active: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true
-  },
-  created_by: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  }
-}, {
-  tableName: 'feature_flags',
-  indexes: [
-    { fields: ['name'] },
-    { fields: ['flag_type'] },
-    { fields: ['risk_level'] },
-    { fields: ['created_by'] },
-    { fields: ['is_active'] }
-  ]
-});
-
-// Flag States model (environment-specific states)
-const FlagState = sequelize.define('FlagState', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  flag_id: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'feature_flags',
-      key: 'id'
-    }
-  },
-  environment: {
-    type: DataTypes.STRING(20),
-    allowNull: false,
-    defaultValue: 'development'
-  },
-  is_enabled: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  rollout_percentage: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-    validate: {
-      min: 0,
-      max: 100
-    }
-  },
-  targeting_rules: {
-    type: DataTypes.JSONB,
-    defaultValue: {}
-  },
-  updated_by: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  }
-}, {
-  tableName: 'flag_states',
-  indexes: [
-    { fields: ['flag_id', 'environment'], unique: true },
-    { fields: ['environment'] },
-    { fields: ['is_enabled'] }
-  ]
-});
-
-// Flag Approvals model
-const FlagApproval = sequelize.define('FlagApproval', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-  flag_id: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'feature_flags',
-      key: 'id'
-    }
-  },
-  requested_by: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  approver_role: {
-    type: DataTypes.STRING(50),
-    allowNull: false
-  },
-  status: {
-    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
-    defaultValue: 'pending'
-  },
-  comments: {
-    type: DataTypes.TEXT
-  },
-  approved_by: {
-    type: DataTypes.UUID,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  approved_at: {
-    type: DataTypes.DATE
-  }
-}, {
-  tableName: 'flag_approvals',
-  indexes: [
-    { fields: ['flag_id'] },
-    { fields: ['status'] },
-    { fields: ['approver_role'] }
-  ]
-});
-
-// ADD THIS RIGHT AFTER FlagMetric model definition (around line 200+)
 
 // Companies model
 const Company = sequelize.define('Company', {
@@ -387,6 +214,187 @@ const UserCompany = sequelize.define('UserCompany', {
   ]
 });
 
+// Feature Flags model (UPDATED with company_id)
+const FeatureFlag = sequelize.define('FeatureFlag', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  name: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    unique: false  // Changed: unique per company, not globally
+  },
+  company_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'companies',
+      key: 'id'
+    }
+  },
+  description: {
+    type: DataTypes.TEXT
+  },
+  flag_type: {
+    type: DataTypes.ENUM('killswitch', 'experiment', 'rollout', 'permission'),
+    defaultValue: 'rollout'
+  },
+  risk_level: {
+    type: DataTypes.ENUM('low', 'medium', 'high', 'critical'),
+    defaultValue: 'medium'
+  },
+  requires_approval: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  auto_disable_on_error: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  error_threshold: {
+    type: DataTypes.DECIMAL(3, 2),
+    defaultValue: 0.05
+  },
+  tags: {
+    type: DataTypes.ARRAY(DataTypes.STRING),
+    defaultValue: []
+  },
+  metadata: {
+    type: DataTypes.JSONB,
+    defaultValue: {}
+  },
+  is_active: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+  created_by: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  }
+}, {
+  tableName: 'feature_flags',
+  indexes: [
+    { fields: ['name', 'company_id'], unique: true }, // Unique per company
+    { fields: ['company_id'] },
+    { fields: ['flag_type'] },
+    { fields: ['risk_level'] },
+    { fields: ['created_by'] },
+    { fields: ['is_active'] }
+  ]
+});
+
+// Flag States model (environment-specific states)
+const FlagState = sequelize.define('FlagState', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  flag_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'feature_flags',
+      key: 'id'
+    }
+  },
+  environment: {
+    type: DataTypes.STRING(20),
+    allowNull: false,
+    defaultValue: 'development'
+  },
+  is_enabled: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  rollout_percentage: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    validate: {
+      min: 0,
+      max: 100
+    }
+  },
+  targeting_rules: {
+    type: DataTypes.JSONB,
+    defaultValue: {}
+  },
+  updated_by: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  }
+}, {
+  tableName: 'flag_states',
+  indexes: [
+    { fields: ['flag_id', 'environment'], unique: true },
+    { fields: ['environment'] },
+    { fields: ['is_enabled'] }
+  ]
+});
+
+// Flag Approvals model
+const FlagApproval = sequelize.define('FlagApproval', {
+  id: {
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
+  },
+  flag_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'feature_flags',
+      key: 'id'
+    }
+  },
+  requested_by: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  approver_role: {
+    type: DataTypes.STRING(50),
+    allowNull: false
+  },
+  status: {
+    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
+    defaultValue: 'pending'
+  },
+  comments: {
+    type: DataTypes.TEXT
+  },
+  approved_by: {
+    type: DataTypes.UUID,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  approved_at: {
+    type: DataTypes.DATE
+  }
+}, {
+  tableName: 'flag_approvals',
+  indexes: [
+    { fields: ['flag_id'] },
+    { fields: ['status'] },
+    { fields: ['approver_role'] }
+  ]
+});
+
 // Audit Log model
 const AuditLog = sequelize.define('AuditLog', {
   id: {
@@ -491,8 +499,18 @@ User.hasMany(FlagState, { foreignKey: 'updated_by', as: 'updated_states' });
 User.hasMany(FlagApproval, { foreignKey: 'requested_by', as: 'requested_approvals' });
 User.hasMany(FlagApproval, { foreignKey: 'approved_by', as: 'approved_approvals' });
 User.hasMany(AuditLog, { foreignKey: 'user_id', as: 'audit_logs' });
+User.hasMany(UserCompany, { foreignKey: 'user_id', as: 'companies' });
+User.hasMany(Company, { foreignKey: 'owner_id', as: 'owned_companies' });
+
+Company.belongsTo(User, { foreignKey: 'owner_id', as: 'owner' });
+Company.hasMany(UserCompany, { foreignKey: 'company_id', as: 'members' });
+Company.hasMany(FeatureFlag, { foreignKey: 'company_id', as: 'flags' });
+
+UserCompany.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+UserCompany.belongsTo(Company, { foreignKey: 'company_id', as: 'company' });
 
 FeatureFlag.belongsTo(User, { foreignKey: 'created_by', as: 'creator' });
+FeatureFlag.belongsTo(Company, { foreignKey: 'company_id', as: 'company' });
 FeatureFlag.hasMany(FlagState, { foreignKey: 'flag_id', as: 'states' });
 FeatureFlag.hasMany(FlagApproval, { foreignKey: 'flag_id', as: 'approvals' });
 FeatureFlag.hasMany(AuditLog, { foreignKey: 'flag_id', as: 'audit_logs' });
@@ -513,6 +531,8 @@ FlagMetric.belongsTo(FeatureFlag, { foreignKey: 'flag_id', as: 'flag' });
 module.exports = {
   sequelize,
   User,
+  Company,
+  UserCompany,
   FeatureFlag,
   FlagState,
   FlagApproval,

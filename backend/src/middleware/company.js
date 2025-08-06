@@ -1,17 +1,15 @@
-// backend/src/middleware/company.js
-// Based on your successful Upstand pattern
-
-const { Company, User } = require('../models');
+// backend/src/middleware/company.js - COMPLETE FILE
+const { Company, User, UserCompany } = require('../models');
 const logger = require('../utils/logger');
 
 /**
- * Extract company context from request (following your Upstand pattern)
+ * Extract company context from request
  */
 const extractCompanyContext = async (req, res, next) => {
   try {
     let companyId = null;
 
-    // Strategy 1: X-Company-ID header (your existing approach)
+    // Strategy 1: X-Company-ID header
     if (req.headers['x-company-id']) {
       companyId = req.headers['x-company-id'];
     }
@@ -21,12 +19,12 @@ const extractCompanyContext = async (req, res, next) => {
       companyId = req.user.company_id;
     }
 
-    // Strategy 3: Subdomain (new addition for ReleasePeace)
+    // Strategy 3: Subdomain
     if (!companyId) {
       const host = req.get('host');
       if (host) {
         const subdomain = host.split('.')[0];
-        if (subdomain && subdomain !== 'www' && subdomain !== 'api') {
+        if (subdomain && subdomain !== 'www' && subdomain !== 'api' && subdomain !== 'localhost') {
           // Look up company by subdomain
           const company = await Company.findOne({ 
             where: { subdomain, is_active: true } 
@@ -54,10 +52,10 @@ const extractCompanyContext = async (req, res, next) => {
       });
     }
 
-    // Set company context (following your pattern)
+    // Set company context
     req.company = company;
     req.companyId = company.id;
-    req.company_id = company.id; // Match your naming convention
+    req.company_id = company.id;
 
     logger.debug('Company context set', {
       companyId: company.id,

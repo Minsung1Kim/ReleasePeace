@@ -1,3 +1,4 @@
+// backend/src/index.js - UPDATED WITH COMPANY ROUTES
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -10,6 +11,7 @@ require('dotenv').config();
 const { sequelize } = require('./models');
 const flagRoutes = require('./routes/flags');
 const userRoutes = require('./routes/users');
+const companyRoutes = require('./routes/companies'); // ADD THIS
 const analyticsRoutes = require('./routes/analytics');
 const sdkRoutes = require('./routes/sdk');
 
@@ -75,6 +77,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/flags', flagRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/companies', companyRoutes); // ADD THIS
 app.use('/api/analytics', analyticsRoutes);
 
 // SDK Routes (optimized for performance)

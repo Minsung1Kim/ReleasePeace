@@ -1,6 +1,4 @@
-// backend/src/routes/companies.js
-// Following your successful Upstand company creation pattern
-
+// backend/src/routes/companies.js - COMPLETE FILE
 const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const { extractCompanyContext, optionalCompanyContext } = require('../middleware/company');
@@ -9,12 +7,11 @@ const crypto = require('crypto');
 
 const router = express.Router();
 
-// Create company (following your pattern)
+// Create company
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const { name, subdomain, domain } = req.body;
     const userId = req.user.id;
-    const userEmail = req.user.email;
 
     if (!name) {
       return res.status(400).json({
@@ -22,7 +19,7 @@ router.post('/', authMiddleware, async (req, res) => {
       });
     }
 
-    // Generate unique invite code (your pattern)
+    // Generate unique invite code
     const inviteCode = crypto.randomBytes(4).toString('hex').toUpperCase();
 
     // Create company
@@ -107,7 +104,7 @@ router.get('/mine', authMiddleware, async (req, res) => {
   }
 });
 
-// Join company by invite code (your pattern)
+// Join company by invite code
 router.post('/join', authMiddleware, async (req, res) => {
   try {
     const { invite_code } = req.body;
