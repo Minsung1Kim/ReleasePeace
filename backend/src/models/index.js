@@ -1,29 +1,57 @@
 const { Sequelize, DataTypes } = require('sequelize');
 require('dotenv').config();
 
-// Database connection
-const sequelize = new Sequelize({
-  dialect: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'releasepeace',
-  username: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || '',
-  
-  pool: {
-    max: 5,
-    min: 0,
-    acquire: 30000,
-    idle: 10000
-  },
-  
-  logging: process.env.NODE_ENV === 'development' ? console.log : false,
-  
-  define: {
-    underscored: true,
-    timestamps: true
-  }
-});
+// Database connection - Railway uses DATABASE_URL
+let sequelize;
+
+if (process.env.DATABASE_URL) {
+  // Railway/Production: Use DATABASE_URL
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: 'postgres',
+    protocol: 'postgres',
+    dialectOptions: {
+      ssl: process.env.NODE_ENV === 'production' ? {
+        require: true,
+        rejectUnauthorized: false
+      } : false
+    },
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    },
+    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    define: {
+      underscored: true,
+      timestamps: true
+    }
+  });
+} else {
+  // Local development: Use individual variables
+  sequelize = new Sequelize({
+    dialect: 'postgres',
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME || 'releasepeace',
+    username: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || '',
+    
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    },
+    
+    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    
+    define: {
+      underscored: true,
+      timestamps: true
+    }
+  });
+}
 
 // Users model
 const User = sequelize.define('User', {

@@ -7,7 +7,7 @@ export default defineConfig({
     port: 3000,
   },
   build: {
-    outDir: 'dist',
+    outDir: 'build', // Changed from 'dist' to 'build' for Vercel
     sourcemap: true
   },
   define: {
