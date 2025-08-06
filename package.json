@@ -1,0 +1,13 @@
+{
+  "name": "releasepeace",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "start": "cd backend && npm start",
+    "build": "cd frontend && npm run build"
+  }
+}
