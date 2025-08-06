@@ -1,7 +1,9 @@
+// frontend/src/App.jsx
 import React, { useState, useEffect } from 'react'
 import { config } from './config'
+import LandingPage from './components/LandingPage'
 
-function App() {
+function Dashboard() {
   const [apiStatus, setApiStatus] = useState('checking...')
   const [flags, setFlags] = useState([])
 
@@ -23,7 +25,7 @@ function App() {
     <div className="min-h-screen bg-gray-100">
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold text-center text-gray-900 mb-4">
-          🚀 ReleasePeace
+          🚀 ReleasePeace Dashboard
         </h1>
         <p className="text-center text-gray-600 mb-8">
           Feature Flag Governance Platform
@@ -113,6 +115,18 @@ function App() {
         </div>
       </div>
     </div>
+  )
+}
+
+function App() {
+  const [showDashboard, setShowDashboard] = useState(false)
+
+  if (showDashboard) {
+    return <Dashboard />
+  }
+
+  return (
+    <LandingPage onEnterApp={() => setShowDashboard(true)} />
   )
 }
 
