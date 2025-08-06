@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { config } from './config'
 import LandingPage from './components/LandingPage'
-import LoginForm from './components/LoginForm'
+import LoginForm from './components/LogInForm'
 import Dashboard from './components/Dashboard'
 import CompanySelector from './components/CompanySelector'
 
