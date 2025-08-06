@@ -136,9 +136,10 @@ const LandingPage = ({ onEnterApp }) => {
           <div className="terminal-content">
             <div className="command">$ npm install @releasepeace/sdk</div>
             <div className="output">Installing ReleasePeace SDK...</div>
-            <div className="output">✓ Connected to neural network</div>
-            <div className="output">✓ Quantum encryption activated</div>
-            <div className="output">✓ Circuit breakers enabled</div>
+            <div className="output">✓ Engineers soundly sleeping</div>
+            <div className="output">✓ Users are checking out seamlessly</div>
+            <div className="output">✓ PMs are finally getting accurate metrics</div>
+            <div className="output">✓ QA team found zero breaking changes</div>
             <div className="command">$ rp.isActive('new_checkout', user)</div>
             <div className="output">true // Flag active for user<span className="cursor"></span></div>
           </div>
