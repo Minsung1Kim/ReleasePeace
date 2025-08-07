@@ -338,5 +338,72 @@ const startServer = async () => {
   }
 };
 
+// ADD THESE DEBUG ROUTES TO YOUR backend/src/index.js 
+// Add them right after the basic "/" route:
+
+// Debug route to test if backend is working
+app.get('/debug', (req, res) => {
+  res.json({
+    message: 'Debug endpoint working!',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    routes_loaded: 'checking...'
+  });
+});
+
+// Test login route directly in main file (temporary)
+app.post('/api/users/login-test', async (req, res) => {
+  try {
+    console.log('🔍 Direct login test hit!', req.body);
+    
+    const { username, role = 'pm' } = req.body;
+    
+    res.json({
+      success: true,
+      message: 'Direct login test working!',
+      received: { username, role },
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Direct login test error:', error);
+    res.status(500).json({
+      error: 'Direct login test failed',
+      message: error.message
+    });
+  }
+});
+
+// Route to check what routes are actually mounted
+app.get('/routes', (req, res) => {
+  const routes = [];
+  
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      // Routes registered directly on the app
+      routes.push({
+        path: middleware.route.path,
+        methods: Object.keys(middleware.route.methods)
+      });
+    } else if (middleware.name === 'router') {
+      // Router middleware
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          routes.push({
+            path: handler.route.path,
+            methods: Object.keys(handler.route.methods)
+          });
+        }
+      });
+    }
+  });
+  
+  res.json({
+    mounted_routes: routes,
+    timestamp: new Date().toISOString()
+  });
+});
+
+
 // Start the application
 startServer();
