@@ -1,4 +1,3 @@
-// frontend/src/App.jsx - COMPLETE UPDATED FILE
 import React, { useState, useEffect } from 'react'
 import { config } from './config'
 import LandingPage from './components/LandingPage'
@@ -59,42 +58,40 @@ function App() {
 
   const handleLogin = async (credentials) => {
     try {
-        console.log('Attempting login to:', `${config.apiUrl}/api/users/login`); // Debug log
-        
-        const response = await fetch(`${config.apiUrl}/api/users/login`, {
+      console.log('🔄 Attempting login...', { username: credentials.username, role: credentials.role });
+      console.log('🌐 API URL:', config.apiUrl);
+      
+      const loginUrl = `${config.apiUrl}/api/users/login`;
+      console.log('📡 Full login URL:', loginUrl);
+      
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(credentials)
-        })
+      });
 
-        console.log('Response status:', response.status); // Debug log
-        console.log('Response headers:', response.headers); // Debug log
+      console.log('📨 Response status:', response.status);
+      console.log('📨 Response ok:', response.ok);
 
-        // Check if response is OK
-        if (!response.ok) {
-        const errorText = await response.text(); // Get raw text first
-        console.log('Error response text:', errorText); // Debug log
-        throw new Error(`HTTP ${response.status}: ${errorText || 'Unknown error'}`);
-        }
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
+        throw new Error(`HTTP ${response.status}: ${errorText || 'Login request failed'}`);
+      }
 
-        // Check if response has content
-        const contentLength = response.headers.get('content-length');
-        if (contentLength === '0') {
-        throw new Error('Empty response from server');
-        }
-
-        let data;
-        try {
+      let data;
+      try {
         data = await response.json();
-        } catch (jsonError) {
+        console.log('✅ Login response:', data);
+      } catch (jsonError) {
+        console.error('❌ JSON parse error:', jsonError);
         const responseText = await response.text();
-        console.log('Failed to parse JSON. Raw response:', responseText);
-        throw new Error(`Invalid JSON response: ${responseText}`);
-        }
+        throw new Error(`Invalid response format: ${responseText}`);
+      }
 
-        if (data.success) {
+      if (data.success) {
         setUser(data.user)
         setToken(data.token)
         setCompanies(data.companies)
@@ -104,26 +101,26 @@ function App() {
         localStorage.setItem('releasepeace_user', JSON.stringify(data.user))
 
         if (data.selected_company) {
-            setSelectedCompany(data.selected_company)
-            localStorage.setItem('releasepeace_company', JSON.stringify(data.selected_company))
-            setCurrentView('dashboard')
+          setSelectedCompany(data.selected_company)
+          localStorage.setItem('releasepeace_company', JSON.stringify(data.selected_company))
+          setCurrentView('dashboard')
         } else if (data.companies.length === 1) {
-            // Auto-select single company
-            handleCompanySelect(data.companies[0], data.token)
+          // Auto-select single company
+          handleCompanySelect(data.companies[0], data.token)
         } else if (data.companies.length > 1) {
-            setCurrentView('company-select')
+          setCurrentView('company-select')
         } else {
-            // No companies - show company creation/join
-            setCurrentView('company-select')
+          // No companies - show company creation/join
+          setCurrentView('company-select')
         }
-        } else {
+      } else {
         throw new Error(data.message || 'Login failed')
-        }
+      }
     } catch (error) {
-        console.error('Login error details:', error)
-        throw error
+      console.error('❌ Login error:', error)
+      throw error
     }
-    }   
+  }   
 
   const handleCompanySelect = async (company, authToken = token) => {
     try {

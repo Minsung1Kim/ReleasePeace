@@ -4,13 +4,14 @@
   "description": "Feature Flag Governance Platform - Backend API",
   "main": "src/index.js",
   "scripts": {
-    "dev": "nodemon src/index.js",
     "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
     "build": "echo 'No build step needed for Node.js'",
     "test": "jest",
     "db:setup": "node src/database/setup.js",
     "db:migrate": "node src/database/migrate.js",
-    "db:seed": "node src/database/seed.js"
+    "db:seed": "node src/database/seed.js",
+    "postinstall": "echo 'Backend dependencies installed'"
   },
   "keywords": ["feature-flags", "governance", "devops", "api"],
   "author": "Minsung Kim",
@@ -46,6 +47,7 @@
     "eslint": "^8.54.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }

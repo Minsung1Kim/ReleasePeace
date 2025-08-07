@@ -5,3 +5,8 @@ export const config = {
   version: '1.0.0',
   environment: import.meta.env.MODE
 };
+
+console.log('🔧 Config loaded:', {
+  apiUrl: config.apiUrl,
+  environment: config.environment
+});
