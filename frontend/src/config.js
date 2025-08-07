@@ -1,4 +1,4 @@
-const BACKEND_URL = 'https://releasepeace-production.up.railway.app/';
+const BACKEND_URL = 'https://releasepeace-production.up.railway.app';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL || BACKEND_URL;
 
