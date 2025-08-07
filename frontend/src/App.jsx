@@ -60,37 +60,56 @@ function App() {
   }
 
   const handleLogin = async (credentials, mode = 'login') => {
-    const { email, password } = credentials
+  const { email, password } = credentials
 
-    try {
-      let userCredential
-      if (mode === 'signup') {
-        userCredential = await createUserWithEmailAndPassword(auth, email, password)
-      } else {
-        userCredential = await signInWithEmailAndPassword(auth, email, password)
-      }
-
-      const user = userCredential.user
-      const idToken = await user.getIdToken()
-
-      console.log('✅ Firebase Auth:', user)
-
-      // Optional: Send idToken to backend (for company data, roles, etc)
-      localStorage.setItem('releasepeace_token', idToken)
-      localStorage.setItem('releasepeace_user', JSON.stringify({
-        email: user.email,
-        uid: user.uid
-      }))
-
-      setUser({ email: user.email, uid: user.uid })
-      setToken(idToken)
-      setCurrentView('dashboard') // or 'company-select'
-
-    } catch (error) {
-      console.error('❌ Firebase login error:', error)
-      throw error
+  try {
+    let userCredential
+    if (mode === 'signup') {
+      userCredential = await createUserWithEmailAndPassword(auth, email, password)
+    } else {
+      userCredential = await signInWithEmailAndPassword(auth, email, password)
     }
+
+    const user = userCredential.user
+    const idToken = await user.getIdToken()
+
+    setUser({ email: user.email, uid: user.uid })
+    setToken(idToken)
+
+    localStorage.setItem('releasepeace_token', idToken)
+    localStorage.setItem('releasepeace_user', JSON.stringify({ email: user.email, uid: user.uid }))
+
+    // 🔍 Fetch user's companies
+    const response = await fetch(`${config.apiUrl}/api/users/me`, {
+      headers: {
+        Authorization: `Bearer ${idToken}`
+      }
+    })
+
+    const data = await response.json()
+
+    if (data.success && data.companies) {
+      setCompanies(data.companies)
+
+      if (data.companies.length === 1) {
+        // ✅ Auto-select company
+        handleCompanySelect(data.companies[0], idToken)
+      } else if (data.companies.length > 1) {
+        // 👉 Let user choose
+        setCurrentView('company-select')
+      } else {
+        // ❌ No companies yet
+        setCurrentView('company-select')
+      }
+    } else {
+      throw new Error('Could not fetch companies')
+    }
+  } catch (error) {
+    console.error('❌ Login error:', error)
+    throw error
   }
+}
+
 const handleGoogleLogin = async () => {
   try {
     const provider = new GoogleAuthProvider()
@@ -134,7 +153,6 @@ const handleGoogleLogin = async () => {
         setSelectedCompany(data.company)
         setToken(data.token)
 
-        // Update localStorage
         localStorage.setItem('releasepeace_token', data.token)
         localStorage.setItem('releasepeace_company', JSON.stringify(data.company))
 
@@ -147,6 +165,7 @@ const handleGoogleLogin = async () => {
       throw error
     }
   }
+
 
   const handleLogout = () => {
     setUser(null)
