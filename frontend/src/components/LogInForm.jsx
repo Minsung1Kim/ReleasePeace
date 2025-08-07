@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 
-const LoginForm = ({ onLogin, onBack }) => {
+const LoginForm = ({ onLogin, onBack, onGoogleLogin }) => {
   const [formData, setFormData] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -80,6 +80,19 @@ const LoginForm = ({ onLogin, onBack }) => {
               {loading ? (showSignUp ? 'Signing up...' : 'Signing in...') : (showSignUp ? 'Create Account' : 'Sign In')}
             </button>
           </form>
+
+          {/* 🔹 Google Sign-In Button */}
+          {!loading && (
+            <div className="mt-6 text-center">
+              <button
+                type="button"
+                onClick={onGoogleLogin}
+                className="w-full py-2 px-4 bg-white text-[#292826] font-semibold border border-[#F9D142] rounded-md hover:bg-[#F9D142] hover:text-black transition"
+              >
+                Sign in with Google
+              </button>
+            </div>
+          )}
 
           <div className="mt-6 text-center">
             {showSignUp ? (

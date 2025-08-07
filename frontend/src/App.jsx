@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard'
 import CompanySelector from './components/CompanySelector'
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
 import { auth } from './firebase'
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 
 function App() {
   const [currentView, setCurrentView] = useState('landing') // 'landing', 'login', 'company-select', 'dashboard'
@@ -59,22 +60,47 @@ function App() {
   }
 
   const handleLogin = async (credentials, mode = 'login') => {
-  const { email, password } = credentials
+    const { email, password } = credentials
 
-  try {
-    let userCredential
-    if (mode === 'signup') {
-      userCredential = await createUserWithEmailAndPassword(auth, email, password)
-    } else {
-      userCredential = await signInWithEmailAndPassword(auth, email, password)
+    try {
+      let userCredential
+      if (mode === 'signup') {
+        userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      } else {
+        userCredential = await signInWithEmailAndPassword(auth, email, password)
+      }
+
+      const user = userCredential.user
+      const idToken = await user.getIdToken()
+
+      console.log('✅ Firebase Auth:', user)
+
+      // Optional: Send idToken to backend (for company data, roles, etc)
+      localStorage.setItem('releasepeace_token', idToken)
+      localStorage.setItem('releasepeace_user', JSON.stringify({
+        email: user.email,
+        uid: user.uid
+      }))
+
+      setUser({ email: user.email, uid: user.uid })
+      setToken(idToken)
+      setCurrentView('dashboard') // or 'company-select'
+
+    } catch (error) {
+      console.error('❌ Firebase login error:', error)
+      throw error
     }
+  }
+const handleGoogleLogin = async () => {
+  try {
+    const provider = new GoogleAuthProvider()
+    const result = await signInWithPopup(auth, provider)
 
-    const user = userCredential.user
+    const user = result.user
     const idToken = await user.getIdToken()
 
-    console.log('✅ Firebase Auth:', user)
+    console.log('✅ Google user:', user)
 
-    // Optional: Send idToken to backend (for company data, roles, etc)
     localStorage.setItem('releasepeace_token', idToken)
     localStorage.setItem('releasepeace_user', JSON.stringify({
       email: user.email,
@@ -83,11 +109,10 @@ function App() {
 
     setUser({ email: user.email, uid: user.uid })
     setToken(idToken)
-    setCurrentView('dashboard') // or 'company-select'
-
-  } catch (error) {
-    console.error('❌ Firebase login error:', error)
-    throw error
+    setCurrentView('dashboard')
+  } catch (err) {
+    console.error('❌ Google sign-in failed:', err)
+    alert('Google login failed')
   }
 }
 
@@ -145,8 +170,14 @@ function App() {
   // Render based on current view
   switch (currentView) {
     case 'login':
-      return <LoginForm onLogin={handleLogin} onBack={() => setCurrentView('landing')} />
-    
+    return (
+      <LoginForm
+        onLogin={handleLogin}
+        onGoogleLogin={handleGoogleLogin}  // ✅ Add this
+        onBack={() => setCurrentView('landing')}
+      />
+    )
+
     case 'company-select':
       return (
         <CompanySelector
