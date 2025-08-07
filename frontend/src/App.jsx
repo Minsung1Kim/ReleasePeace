@@ -4,6 +4,8 @@ import LandingPage from './components/LandingPage'
 import LoginForm from './components/LogInForm'
 import Dashboard from './components/Dashboard'
 import CompanySelector from './components/CompanySelector'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
+import { auth } from './firebase'
 
 function App() {
   const [currentView, setCurrentView] = useState('landing') // 'landing', 'login', 'company-select', 'dashboard'
@@ -56,71 +58,39 @@ function App() {
     }
   }
 
-  const handleLogin = async (credentials) => {
-    try {
-      console.log('🔄 Attempting login...', { username: credentials.username, role: credentials.role });
-      console.log('🌐 API URL:', config.apiUrl);
-      
-      const loginUrl = `${config.apiUrl}/api/users/login`;
-      console.log('📡 Full login URL:', loginUrl);
-      
-      const response = await fetch(loginUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(credentials)
-      });
+  const handleLogin = async (credentials, mode = 'login') => {
+  const { email, password } = credentials
 
-      console.log('📨 Response status:', response.status);
-      console.log('📨 Response ok:', response.ok);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Error response:', errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText || 'Login request failed'}`);
-      }
-
-      let data;
-      try {
-        data = await response.json();
-        console.log('✅ Login response:', data);
-      } catch (jsonError) {
-        console.error('❌ JSON parse error:', jsonError);
-        const responseText = await response.text();
-        throw new Error(`Invalid response format: ${responseText}`);
-      }
-
-      if (data.success) {
-        setUser(data.user)
-        setToken(data.token)
-        setCompanies(data.companies)
-
-        // Save to localStorage
-        localStorage.setItem('releasepeace_token', data.token)
-        localStorage.setItem('releasepeace_user', JSON.stringify(data.user))
-
-        if (data.selected_company) {
-          setSelectedCompany(data.selected_company)
-          localStorage.setItem('releasepeace_company', JSON.stringify(data.selected_company))
-          setCurrentView('dashboard')
-        } else if (data.companies.length === 1) {
-          // Auto-select single company
-          handleCompanySelect(data.companies[0], data.token)
-        } else if (data.companies.length > 1) {
-          setCurrentView('company-select')
-        } else {
-          // No companies - show company creation/join
-          setCurrentView('company-select')
-        }
-      } else {
-        throw new Error(data.message || 'Login failed')
-      }
-    } catch (error) {
-      console.error('❌ Login error:', error)
-      throw error
+  try {
+    let userCredential
+    if (mode === 'signup') {
+      userCredential = await createUserWithEmailAndPassword(auth, email, password)
+    } else {
+      userCredential = await signInWithEmailAndPassword(auth, email, password)
     }
-  }   
+
+    const user = userCredential.user
+    const idToken = await user.getIdToken()
+
+    console.log('✅ Firebase Auth:', user)
+
+    // Optional: Send idToken to backend (for company data, roles, etc)
+    localStorage.setItem('releasepeace_token', idToken)
+    localStorage.setItem('releasepeace_user', JSON.stringify({
+      email: user.email,
+      uid: user.uid
+    }))
+
+    setUser({ email: user.email, uid: user.uid })
+    setToken(idToken)
+    setCurrentView('dashboard') // or 'company-select'
+
+  } catch (error) {
+    console.error('❌ Firebase login error:', error)
+    throw error
+  }
+}
+
 
   const handleCompanySelect = async (company, authToken = token) => {
     try {
