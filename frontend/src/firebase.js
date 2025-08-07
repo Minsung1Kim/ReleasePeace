@@ -3,13 +3,13 @@ import { initializeApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
 
 const firebaseConfig = {
-  apiKey: "",
-  authDomain: "releasepeace-d4abd.firebaseapp.com",
-  projectId: "releasepeace-d4abd",
-  storageBucket: "releasepeace-d4abd.firebasestorage.app",
-  messagingSenderId: "757442368870",
-  appId: "1:757442368870:web:542492f533966a5640e4a7",
-  measurementId: "G-VMHSFY9Q8E"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 }
 
 const app = initializeApp(firebaseConfig)
