@@ -85,12 +85,12 @@ const LoginForm = ({ onLogin, onBack, onGoogleLogin }) => {
           {!loading && (
             <div className="mt-6 text-center">
               <button
-                type="button"
-                onClick={onGoogleLogin}
-                className="w-full py-2 px-4 bg-white text-[#292826] font-semibold border border-[#F9D142] rounded-md hover:bg-[#F9D142] hover:text-black transition"
-              >
-                Sign in with Google
-              </button>
+              type="button"
+              onClick={onGoogleLogin}
+              className="w-full py-2 px-4 bg-white text-[#292826] font-semibold border border-[#F9D142] rounded-md hover:bg-[#F9D142] hover:text-black transition"
+            >
+              {showSignUp ? 'Sign up with Google' : 'Sign in with Google'}
+            </button>
             </div>
           )}
 
