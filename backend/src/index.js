@@ -35,7 +35,6 @@ app.use(helmet({
 // CORS - Allow your frontend domains
 app.use(cors({
   origin: [
-    'http://localhost:3000',
     'https://release-peace.vercel.app',
     'https://releasepeace-frontend.vercel.app',
     process.env.FRONTEND_URL
@@ -314,19 +313,17 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 // Start the server
 const startServer = async () => {
   try {
-    // Initialize the app (database, routes, etc.)
     await initializeApp();
     
-    // Start listening
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('✅ Server started successfully!');
       console.log(`🚀 ReleasePeace API running on port ${PORT}`);
-      console.log(`🔗 Health: http://localhost:${PORT}/health`);
-      console.log(`📡 API: http://localhost:${PORT}/api`);
-      console.log(`🎯 SDK: http://localhost:${PORT}/sdk`);
+      console.log(`🔗 Health: https://releasepeace-production.up.railway.app/health`);
+      console.log(`📡 API: https://releasepeace-production.up.railway.app/api`);
+      console.log(`🎯 SDK: https://releasepeace-production.up.railway.app/sdk`);
+      console.log(`🌐 Frontend: https://release-peace.vercel.app`);
     });
     
-    // Handle server errors
     server.on('error', (error) => {
       console.error('❌ Server error:', error);
       process.exit(1);
