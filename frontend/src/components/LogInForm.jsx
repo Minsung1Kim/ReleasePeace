@@ -1,4 +1,4 @@
-// frontend/src/components/LoginForm.jsx - NEW FILE
+// frontend/src/components/LoginForm.jsx - KEEPING YOUR CURRENT THEME
 import React, { useState } from 'react'
 
 const LoginForm = ({ onLogin, onBack }) => {
@@ -8,6 +8,7 @@ const LoginForm = ({ onLogin, onBack }) => {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showSignUp, setShowSignUp] = useState(false)
 
   const handleChange = (e) => {
     setFormData({
@@ -42,27 +43,39 @@ const LoginForm = ({ onLogin, onBack }) => {
     setLoading(true)
   }
 
+  const handleSignUp = async (e) => {
+    e.preventDefault()
+    // For demo, signup just creates a new user with login
+    await handleSubmit(e)
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center px-4">
       <div className="max-w-md w-full">
         <div className="bg-white rounded-lg shadow-xl p-8">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to ReleasePeace</h1>
-            <p className="text-gray-600">Sign in to manage your feature flags</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {showSignUp ? 'Create Account' : 'Welcome to ReleasePeace'}
+            </h1>
+            <p className="text-gray-600">
+              {showSignUp ? 'Create your account to get started' : 'Sign in to manage your feature flags'}
+            </p>
           </div>
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
               <div className="flex">
                 <div className="ml-3">
-                  <h3 className="text-sm font-medium text-red-800">Login Error</h3>
+                  <h3 className="text-sm font-medium text-red-800">
+                    {showSignUp ? 'Signup Error' : 'Login Error'}
+                  </h3>
                   <div className="mt-2 text-sm text-red-700">{error}</div>
                 </div>
               </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={showSignUp ? handleSignUp : handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Username
@@ -74,7 +87,7 @@ const LoginForm = ({ onLogin, onBack }) => {
                 onChange={handleChange}
                 required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter your username"
+                placeholder={showSignUp ? "Choose a username" : "Enter your username"}
                 disabled={loading}
               />
             </div>
@@ -109,59 +122,91 @@ const LoginForm = ({ onLogin, onBack }) => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Signing in...
+                  {showSignUp ? 'Creating Account...' : 'Signing in...'}
                 </div>
               ) : (
-                'Sign In'
+                showSignUp ? 'Create Account' : 'Sign In'
               )}
             </button>
           </form>
 
-          <div className="mt-8">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+          <div className="mt-6 text-center">
+            {showSignUp ? (
+              <div>
+                <span className="text-sm text-gray-600">Already have an account? </span>
+                <button
+                  type="button"
+                  onClick={() => setShowSignUp(false)}
+                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                  disabled={loading}
+                >
+                  Sign In
+                </button>
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or try a demo account</span>
+            ) : (
+              <div>
+                <span className="text-sm text-gray-600">Need an account? </span>
+                <button
+                  type="button"
+                  onClick={() => setShowSignUp(true)}
+                  className="text-sm text-blue-600 hover:text-blue-500 font-medium"
+                  disabled={loading}
+                >
+                  Create Account
+                </button>
               </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => quickLogin('alice_pm', 'pm')}
-                disabled={loading}
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Alice (PM)
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLogin('bob_engineer', 'engineer')}
-                disabled={loading}
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Bob (Eng)
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLogin('carol_qa', 'qa')}
-                disabled={loading}
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Carol (QA)
-              </button>
-              <button
-                type="button"
-                onClick={() => quickLogin('emma_admin', 'admin')}
-                disabled={loading}
-                className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
-              >
-                Emma (Admin)
-              </button>
-            </div>
+            )}
           </div>
+
+          {!showSignUp && (
+            <>
+              <div className="mt-8">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300" />
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">Or try a demo account</span>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => quickLogin('alice_pm', 'pm')}
+                    disabled={loading}
+                    className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Alice (PM)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => quickLogin('bob_engineer', 'engineer')}
+                    disabled={loading}
+                    className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Bob (Eng)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => quickLogin('carol_qa', 'qa')}
+                    disabled={loading}
+                    className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Carol (QA)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => quickLogin('emma_admin', 'admin')}
+                    disabled={loading}
+                    className="w-full inline-flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Emma (Admin)
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="mt-6 text-center">
             <button
