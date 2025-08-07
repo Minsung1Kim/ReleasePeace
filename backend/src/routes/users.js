@@ -9,6 +9,8 @@ const router = express.Router();
 // Login with company selection
 router.post('/login', async (req, res) => {
   try {
+    console.log('🔐 Login attempt:', req.body);
+    
     const { username, role = 'pm', company_id } = req.body;
 
     if (!username) {
@@ -21,6 +23,7 @@ router.post('/login', async (req, res) => {
     let user = await User.findOne({ where: { username } });
     
     if (!user) {
+      console.log('👤 Creating new user:', username);
       user = await User.create({
         username,
         email: `${username}@demo.com`,
@@ -71,9 +74,11 @@ router.post('/login', async (req, res) => {
 
     const token = jwt.sign(
       tokenPayload,
-      process.env.JWT_SECRET || 'fallback_secret',
+      process.env.JWT_SECRET || 'fallback_secret_key_change_this',
       { expiresIn: process.env.JWT_EXPIRY || '24h' }
     );
+
+    console.log('✅ Login successful for:', username);
 
     res.json({
       success: true,
@@ -90,7 +95,7 @@ router.post('/login', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ Login error:', error);
     res.status(500).json({
       error: 'Login failed',
       message: error.message
@@ -138,7 +143,7 @@ router.post('/switch-company', authMiddleware, async (req, res) => {
         username: user.username,
         company_id: company_id
       },
-      process.env.JWT_SECRET || 'fallback_secret',
+      process.env.JWT_SECRET || 'fallback_secret_key_change_this',
       { expiresIn: process.env.JWT_EXPIRY || '24h' }
     );
 
@@ -205,12 +210,26 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
-// Get all users (for demo - no company filtering)
+// Test endpoint to verify route is working
+router.get('/test', (req, res) => {
+  res.json({
+    message: 'Users route is working!',
+    timestamp: new Date().toISOString(),
+    available_endpoints: {
+      login: 'POST /api/users/login',
+      me: 'GET /api/users/me',
+      switch: 'POST /api/users/switch-company'
+    }
+  });
+});
+
+// Get all users (for demo)
 router.get('/', async (req, res) => {
   try {
     const users = await User.findAll({
       attributes: ['id', 'username', 'display_name', 'role', 'email', 'created_at'],
-      order: [['created_at', 'DESC']]
+      order: [['created_at', 'DESC']],
+      limit: 50
     });
 
     res.json({

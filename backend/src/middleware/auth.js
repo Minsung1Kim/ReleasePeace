@@ -1,9 +1,6 @@
+// backend/src/middleware/auth.js - COMPLETE FILE
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
-const logger = require('../utils/logger');
-
-// For now, we'll implement a simple auth system
-// In production, you'd integrate with OAuth providers
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -16,7 +13,7 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key_change_this');
     const user = await User.findByPk(decoded.userId);
 
     if (!user || !user.is_active) {
@@ -30,7 +27,7 @@ const authMiddleware = async (req, res, next) => {
     next();
 
   } catch (error) {
-    logger.error('Auth middleware error:', error);
+    console.error('Auth middleware error:', error);
     res.status(401).json({
       error: 'Access denied',
       message: 'Invalid token'
@@ -44,7 +41,7 @@ const optionalAuth = async (req, res, next) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key_change_this');
       const user = await User.findByPk(decoded.userId);
 
       if (user && user.is_active) {
