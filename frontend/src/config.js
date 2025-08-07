@@ -1,5 +1,4 @@
-// API configuration
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://your-backend.railway.app';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'YOUR_ACTUAL_RAILWAY_URL_HERE';
 
 export const config = {
   apiUrl: API_BASE_URL,
