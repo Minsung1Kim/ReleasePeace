@@ -140,7 +140,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
               <h1 className="text-2xl font-bold text-gray-900">ReleasePeace</h1>
               <div className="ml-6 flex items-center space-x-4">
                 <div className="text-sm text-gray-500">
-                  <span className="font-medium">{company.name}</span>
+                  <span className="font-medium">{company?.name || 'No company selected'}</span>
                   <span className="mx-2">•</span>
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
                     company.plan === 'enterprise' ? 'bg-purple-100 text-purple-800' :
