@@ -60,22 +60,34 @@ function App() {
   }
 
   const handleLogin = async (credentials, mode = 'login') => {
-    try {
-      let userCred
-      if (mode === 'signup') {
-        userCred = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password)
-      } else {
-        userCred = await signInWithEmailAndPassword(auth, credentials.email, credentials.password)
-      }
-      const idToken = await userCred.user.getIdToken()
+    const { email, password } = credentials
 
-      // Persist session
-      setUser({ email: userCred.user.email, uid: userCred.user.uid })
+    try {
+      let userCredential
+      if (mode === 'signup') {
+        userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      } else {
+        userCredential = await signInWithEmailAndPassword(auth, email, password)
+      }
+
+      const userCred = userCredential.user
+      const idToken = await userCred.getIdToken()
+
+      if (mode === 'signup') {
+        // New user: go straight to company select
+        setUser({ email: userCred.email, uid: userCred.uid });
+        setToken(idToken);
+        localStorage.setItem('releasepeace_token', idToken);
+        localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.email, uid: userCred.uid }));
+        setCurrentView('company-select');
+        return;
+      }
+
+      // fallback for login
+      setUser({ email: userCred.email, uid: userCred.uid })
       setToken(idToken)
       localStorage.setItem('releasepeace_token', idToken)
-      localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.user.email, uid: userCred.user.uid }))
-
-      // Fetch companies and route accordingly
+      localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.email, uid: userCred.uid }))
       await fetchUserCompanies(idToken)
     } catch (error) {
       console.error('❌ Login error:', error)

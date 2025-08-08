@@ -269,7 +269,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
                 const currentEnvState = flag.states?.find(s => s.environment === activeEnvironment)
                 
                 return (
-                  <div key={flag.id} className="p-6 hover:bg-gray-50">
+                  <div key={flag.id} className="p-6 hover:bg-[var(--rp-accent)] transition">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
