@@ -2,76 +2,71 @@
 @tailwind components;
 @tailwind utilities;
 
-/* === Global theme (copied from LandingPage.css) === */
-:root {
-  --rp-primary: #F9D142;         /* primary yellow */
-  --rp-bg: #292826;              /* deep charcoal */
-  --rp-card-bg: #1f1e1c;         /* card surface */
-  --rp-input-bg: #2d2c2a;        /* input surface */
-  --rp-border: rgba(249, 209, 66, 0.35);
-  --rp-text: var(--rp-primary);
-  --rp-text-muted: rgba(249, 209, 66, 0.82);
-  --rp-accent: rgba(249, 209, 66, 0.08);
+/* ===== ReleasePeace theme (professional dark) ===== */
+:root{
+  --rp-primary: #F9D142;              /* accent yellow */
+  --rp-bg: #292826;                   /* page background */
+  --rp-card-bg: #1f1e1c;              /* cards/surfaces */
+  --rp-fg: #EAE7DF;                   /* **main text** (neutral) */
+  --rp-muted: rgba(234, 231, 223, .75);
+  --rp-border: rgba(249, 209, 66, .22);
+  --rp-accent: rgba(249, 209, 66, .08);
 }
 
-/* Base reset + fonts */
-html, body, #root { height:100%; }
-body {
+html, body, #root { height: 100%; }
+body{
   margin: 0;
   background: var(--rp-bg);
-  color: var(--rp-text);
+  color: var(--rp-fg);                /* neutral by default */
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Utility classes */
-.rp-card {
+/* Reusable bits */
+.rp-card{
   background: var(--rp-card-bg);
   border: 1px solid var(--rp-border);
-  border-radius: 0.75rem;
+  border-radius: .75rem;
 }
-.rp-btn-primary {
+.rp-btn-primary{
   background: var(--rp-primary);
-  color: #111;
-  transition: opacity .2s;
+  color:#111;
+  border-radius: .5rem;
+  transition: opacity .15s ease;
 }
-.rp-btn-primary:hover { opacity: .9; }
-.rp-input {
-  background: var(--rp-input-bg);
-  color: var(--rp-text);
+.rp-btn-primary:hover{ opacity:.9; }
+.rp-input{
+  background: var(--rp-card-bg);
+  color: var(--rp-fg);
   border: 1px solid var(--rp-border);
   border-radius: .375rem;
-  padding: .5rem;
+  padding: .5rem .75rem;
 }
-.rp-badge {
+.rp-badge{
   background: var(--rp-accent);
-  color: var(--rp-text);
+  color: var(--rp-fg);
   border: 1px solid var(--rp-border);
   border-radius: 9999px;
-  padding: .125rem .5rem;
-  font-size: .75rem;
+  padding: .125rem .5rem; font-size: .75rem;
 }
-.rp-link { color: var(--rp-primary); }
-.rp-link:hover { text-decoration: underline; }
+.rp-link{ color: var(--rp-primary); }
+.rp-link:hover{ text-decoration: underline; }
+.rp-heading{ color: var(--rp-primary); }
 
-/* === Override Tailwind defaults === */
-.bg-white,
-.bg-gray-50,
-.bg-gray-100 { background-color: var(--rp-card-bg) !important; }
-.text-gray-900,
-.text-gray-800 { color: var(--rp-text) !important; }
-.text-gray-700,
-.text-gray-600,
-.text-gray-500 { color: var(--rp-text-muted) !important; }
-.border-gray-200,
-.border-gray-300 { border-color: var(--rp-border) !important; }
-.divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: var(--rp-border) !important;
+/* Tailwind remaps (so existing classes look on-brand) */
+.bg-white, .bg-gray-50, .bg-gray-100 { background: var(--rp-card-bg) !important; }
+.text-gray-900, .text-gray-800 { color: var(--rp-fg) !important; }
+.text-gray-700, .text-gray-600, .text-gray-500 { color: var(--rp-muted) !important; }
+.border-gray-200, .border-gray-300 { border-color: var(--rp-border) !important; }
+.divide-gray-200 > :not([hidden]) ~ :not([hidden]){ border-color: var(--rp-border) !important; }
+
+/* Brand accents map to yellow */
+.bg-blue-600, .hover\:bg-blue-700:hover{ background-color: var(--rp-primary) !important; }
+.text-blue-600{ color: var(--rp-primary) !important; }
+.focus\:ring-blue-500:focus{ --tw-ring-color: var(--rp-primary) !important; }
+
+/* Status greens → brand with readable text */
+.bg-green-500, .text-green-600{
+  background-color: var(--rp-primary) !important; color:#111 !important;
 }
-.bg-blue-600,
-.hover\:bg-blue-700:hover { background-color: var(--rp-primary) !important; }
-.text-blue-600 { color: var(--rp-primary) !important; }
-.focus\:ring-blue-500:focus { --tw-ring-color: var(--rp-primary) !important; }
-.bg-green-500,
-.text-green-600 { background-color: var(--rp-primary) !important; color:#111!important; }

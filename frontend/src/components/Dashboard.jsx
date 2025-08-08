@@ -131,13 +131,13 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   const environments = ['development', 'staging', 'production']
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-[var(--rp-bg)] text-[var(--rp-fg)]">
       {/* Header */}
-      <header className="bg-white shadow">
+      <header className="bg-[var(--rp-card-bg)] border-b border-[var(--rp-border)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
-              <h1 className="text-2xl font-bold text-gray-900">ReleasePeace</h1>
+              <h1 className="text-2xl font-bold rp-heading">ReleasePeace</h1>
               <div className="ml-6 flex items-center space-x-4">
                 <div className="text-sm text-gray-500">
                   <span className="font-medium">{company?.name || 'No company selected'}</span>
@@ -180,30 +180,30 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+          <div className="rp-card p-6 text-center">
             <div className="text-3xl font-bold text-blue-600">{flags.length}</div>
             <div className="text-sm text-gray-600">Total Flags</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+          <div className="rp-card p-6 text-center">
             <div className="text-3xl font-bold text-green-600">
               {flags.filter(f => f.states?.some(s => s.is_enabled)).length}
             </div>
             <div className="text-sm text-gray-600">Active Flags</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+          <div className="rp-card p-6 text-center">
             <div className="text-3xl font-bold text-orange-600">
               {flags.filter(f => f.risk_level === 'high' || f.risk_level === 'critical').length}
             </div>
             <div className="text-sm text-gray-600">High Risk</div>
           </div>
-          <div className="bg-white rounded-lg shadow p-6 text-center">
+          <div className="rp-card p-6 text-center">
             <div className="text-3xl font-bold text-purple-600">3</div>
             <div className="text-sm text-gray-600">Environments</div>
           </div>
         </div>
 
         {/* Environment Selector */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <div className="rp-card p-4 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <span className="text-sm font-medium text-gray-700">Environment:</span>
@@ -214,8 +214,8 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
                     onClick={() => setActiveEnvironment(env)}
                     className={`px-3 py-1 rounded-md text-sm font-medium ${
                       activeEnvironment === env
-                        ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                        : 'text-gray-600 hover:bg-gray-100 border border-gray-300'
+                        ? 'bg-[var(--rp-accent)] text-[var(--rp-fg)] border border-[var(--rp-border)]'
+                        : 'text-[var(--rp-muted)] hover:bg-[var(--rp-accent)] border border-[var(--rp-border)]'
                     }`}
                   >
                     {env.charAt(0).toUpperCase() + env.slice(1)}
@@ -225,7 +225,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
             </div>
             <button
               onClick={() => setShowCreateFlag(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+              className="px-4 py-2 rp-btn-primary rounded-md text-sm font-semibold"
             >
               + Create Flag
             </button>
@@ -241,7 +241,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         )}
 
         {/* Flags List */}
-        <div className="bg-white rounded-lg shadow">
+        <div className="rp-card">
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-semibold">Feature Flags ({flags.length})</h2>
           </div>
@@ -291,7 +291,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
                         {flag.tags && flag.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-3">
                             {flag.tags.map((tag, index) => (
-                              <span key={index} className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
+                              <span key={index} className="rp-badge text-xs">
                                 #{tag}
                               </span>
                             ))}
@@ -311,18 +311,16 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
                         {currentEnvState ? (
                           <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                              <span className={`w-3 h-3 rounded-full ${currentEnvState.is_enabled ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+                              <span className={`w-3 h-3 rounded-full ${
+                                currentEnvState.is_enabled ? 'bg-[var(--rp-primary)]' : 'bg-gray-500/50'
+                              }`}></span>
                               <span className="text-sm text-gray-600">
                                 {currentEnvState.is_enabled ? `${currentEnvState.rollout_percentage}% enabled` : 'Disabled'}
                               </span>
                             </div>
                             <button
                               onClick={() => toggleFlagState(flag.id, activeEnvironment, currentEnvState)}
-                              className={`px-3 py-1 rounded text-xs font-medium ${
-                                currentEnvState.is_enabled
-                                  ? 'bg-red-100 text-red-800 hover:bg-red-200'
-                                  : 'bg-green-100 text-green-800 hover:bg-green-200'
-                              }`}
+                              className="px-3 py-1 rounded text-xs font-medium rp-btn-primary"
                             >
                               {currentEnvState.is_enabled ? 'Disable' : 'Enable'}
                             </button>
@@ -354,12 +352,12 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         </div>
 
         {/* Company Info */}
-        <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
-          <h3 className="font-semibold text-blue-900 mb-2">🎉 Multi-Tenant Setup Complete!</h3>
-          <p className="text-blue-800 text-sm mb-2">
+        <div className="mt-8 rp-card p-6">
+          <h3 className="font-semibold rp-heading mb-2">🎉 Multi-Tenant Setup Complete!</h3>
+          <p className="text-sm text-[var(--rp-muted)] mb-2">
             You're viewing flags for <strong>{company?.name}</strong>. Each company has completely isolated data.
           </p>
-          <div className="text-blue-700 text-sm">
+          <div className="text-sm text-[var(--rp-muted)]">
             <strong>Company Details:</strong><br/>
             • Name: {company?.name}<br/>
             • Subdomain: {company?.subdomain}<br/>
