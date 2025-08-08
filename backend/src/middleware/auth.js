@@ -1,3 +1,7 @@
+// backend/src/middleware/auth.js
+// Dual-mode auth: accepts local JWT (JWT_SECRET) OR Firebase ID token.
+// On Firebase auth, auto-creates/activates a DB user from token claims.
+
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
 
@@ -8,17 +12,18 @@ function ensureFirebaseAdmin() {
     admin = require('firebase-admin');
     if (admin.apps.length === 0) {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        console.log('✅ FIREBASE_SERVICE_ACCOUNT present. Parsing…');
         const svc = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         admin.initializeApp({ credential: admin.credential.cert(svc) });
         console.log('✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT');
       } else {
-        admin.initializeApp(); // ADC path if configured
-        console.log('✅ Firebase Admin initialized with ADC');
+        // No creds provided; admin SDK won’t be able to verify production tokens
+        console.warn('⚠️ No FIREBASE_SERVICE_ACCOUNT env var found. Firebase Admin not initialized.');
       }
     }
   } catch (e) {
+    console.warn('⚠️ Firebase Admin not available. Only local JWTs will work.', e?.message);
     admin = null;
-    console.warn('⚠️ Firebase Admin not available. Only local JWTs will work.');
   }
   return admin;
 }
@@ -39,6 +44,7 @@ async function verifyFirebaseToken(token) {
     const payload = await fb.auth().verifyIdToken(token);
     return payload || null;
   } catch (err) {
+    console.error('❌ Firebase verifyIdToken failed:', err?.message);
     return null;
   }
 }
@@ -47,7 +53,7 @@ async function getOrCreateUserFromFirebase(payload) {
   const email = payload.email || `${payload.uid}@firebase.local`;
   const username = (email.split('@')[0] || payload.uid).toLowerCase();
 
-  // Try by email, then username
+  // Try to find by email first, then username
   let user = await User.findOne({ where: { email } });
   if (!user) user = await User.findOne({ where: { username } });
 
@@ -56,14 +62,13 @@ async function getOrCreateUserFromFirebase(payload) {
       username,
       email,
       display_name: payload.name || username,
-      role: 'member',     // global user role; company-specific role handled in UserCompany
-      is_active: true,
+      role: 'member',
+      is_active: true
     });
-    console.log('👤 Created user from Firebase:', user.id, username);
+    console.log('👤 Created DB user from Firebase:', user.id, username);
   } else if (!user.is_active) {
     await user.update({ is_active: true });
   }
-
   return user;
 }
 
@@ -76,7 +81,7 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ error: 'Access denied', message: 'No token provided' });
     }
 
-    // 1) Local JWT
+    // 1) Local JWT path
     const local = await verifyLocalJWT(token);
     if (local?.userId) {
       const user = await User.findByPk(local.userId);
@@ -87,7 +92,7 @@ const authMiddleware = async (req, res, next) => {
       return next();
     }
 
-    // 2) Firebase ID token
+    // 2) Firebase ID token path
     const fb = await verifyFirebaseToken(token);
     if (fb?.uid) {
       const user = await getOrCreateUserFromFirebase(fb);
