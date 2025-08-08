@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { config } from '../config'
 
-const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
+const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }) => {
   const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id
   const [apiStatus, setApiStatus] = useState('checking...')
   const [flags, setFlags] = useState([])
@@ -13,6 +13,38 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   const [showCreateFlag, setShowCreateFlag] = useState(false)
   const [showRoleModal, setShowRoleModal] = useState(false)
   const [companyMembers, setCompanyMembers] = useState([])
+
+  // Always use a fresh Firebase ID token and retry once on 401
+  const authedFetch = async (path, opts = {}, retry = true) => {
+    // get a fresh token if possible
+    let t = token
+    try {
+      if (getToken) t = await getToken()
+    } catch (_) {}
+
+    const headers = {
+      ...(opts.headers || {}),
+      Authorization: `Bearer ${t}`,
+      'X-Company-ID': company?.id || company?.subdomain || 'demo'
+    }
+
+    const res = await fetch(`${config.apiUrl}${path}`, { ...opts, headers })
+
+    // If token expired, refresh and retry once
+    if (res.status === 401 && retry && getToken) {
+      try {
+        const fresh = await getToken()
+        const res2 = await fetch(`${config.apiUrl}${path}`, {
+          ...opts,
+          headers: { ...(opts.headers || {}), Authorization: `Bearer ${fresh}`, 'X-Company-ID': headers['X-Company-ID'] }
+        })
+        return res2
+      } catch (_) {
+        // fall through to original res
+      }
+    }
+    return res
+  }
   // Fetch company with members for modal
   const fetchCompanyWithMembers = async () => {
     try {
@@ -50,15 +82,8 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   const fetchFlags = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${config.apiUrl}/api/flags`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Company-ID': companyId
-        }
-      })
-
+      const response = await authedFetch('/api/flags')
       const data = await response.json()
-      
       if (data.success) {
         setFlags(data.flags || [])
       } else {
@@ -99,18 +124,12 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
 
   const createFlag = async (flagData) => {
     try {
-      const response = await fetch(`${config.apiUrl}/api/flags`, {
+      const response = await authedFetch('/api/flags', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Company-ID': companyId
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(flagData)
       })
-
       const data = await response.json()
-      
       if (data.success) {
         setFlags([data.flag, ...flags])
         setShowCreateFlag(false)
@@ -125,20 +144,12 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
 
   const toggleFlagState = async (flagId, environment, currentState) => {
     try {
-      const response = await fetch(`${config.apiUrl}/api/flags/${flagId}/state/${environment}`, {
+      const response = await authedFetch(`/api/flags/${flagId}/state/${environment}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'X-Company-ID': companyId
-        },
-        body: JSON.stringify({
-          is_enabled: !currentState.is_enabled
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_enabled: !currentState.is_enabled })
       })
-
       const data = await response.json()
-      
       if (data.success) {
         // Refresh flags to get updated state
         fetchFlags()

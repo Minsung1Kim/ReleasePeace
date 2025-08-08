@@ -4,17 +4,36 @@ import LandingPage from './components/LandingPage'
 import LoginForm from './components/LogInForm'
 import Dashboard from './components/Dashboard'
 import CompanySelector from './components/CompanySelector'
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  signInWithPopup,
+  onAuthStateChanged
+} from 'firebase/auth'
 import { auth } from './firebase'
 
 function App() {
-  const [currentView, setCurrentView] = useState('landing') // 'landing', 'login', 'company-select', 'dashboard'
+  const [currentView, setCurrentView] = useState('landing')
   const [user, setUser] = useState(null)
   const [companies, setCompanies] = useState([])
   const [selectedCompany, setSelectedCompany] = useState(null)
   const [token, setToken] = useState(null)
 
-  // Check for existing session on load
+  // keep auth in sync (handles refresh & tab restore)
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      if (!fbUser) return
+      const fresh = await fbUser.getIdToken(true)
+      setToken(fresh)
+      setUser({ email: fbUser.email, uid: fbUser.uid })
+      localStorage.setItem('releasepeace_token', fresh)
+      localStorage.setItem('releasepeace_user', JSON.stringify({ email: fbUser.email, uid: fbUser.uid }))
+    })
+    return () => unsub()
+  }, [])
+
+  // boot from storage
   useEffect(() => {
     const savedToken = localStorage.getItem('releasepeace_token')
     const savedUser = localStorage.getItem('releasepeace_user')
@@ -23,37 +42,49 @@ function App() {
     if (savedToken && savedUser) {
       setToken(savedToken)
       setUser(JSON.parse(savedUser))
-      
       if (savedCompany) {
         setSelectedCompany(JSON.parse(savedCompany))
         setCurrentView('dashboard')
       } else {
-        // User logged in but no company selected → look up companies
         fetchUserCompanies(savedToken)
       }
     }
   }, [])
 
+  // always return a fresh token (and persist)
+  const getFreshToken = async () => {
+    if (auth.currentUser) {
+      try {
+        const fresh = await auth.currentUser.getIdToken(true)
+        setToken(fresh)
+        localStorage.setItem('releasepeace_token', fresh)
+        return fresh
+      } catch {
+        // fall back to last known token
+      }
+    }
+    return token
+  }
+
   const fetchUserCompanies = async (authToken) => {
     try {
-      const response = await fetch(`${config.apiUrl}/api/companies/mine`, {
-        headers: { 'Authorization': `Bearer ${authToken}` }
+      const t = authToken || (await getFreshToken())
+      const res = await fetch(`${config.apiUrl}/api/companies/mine`, {
+        headers: { Authorization: `Bearer ${t}` }
       })
-      const data = await response.json()
-      
+      const data = await res.json()
       if (data.success && Array.isArray(data.companies)) {
         setCompanies(data.companies)
         if (data.companies.length === 1) {
-          // Auto-select if only one company
-          handleCompanySelect(data.companies[0], authToken)
+          handleCompanySelect(data.companies[0], t)
         } else {
           setCurrentView('company-select')
         }
       } else {
         throw new Error(data?.message || 'Could not load companies')
       }
-    } catch (error) {
-      console.error('Failed to fetch companies:', error)
+    } catch (err) {
+      console.error('Failed to fetch companies:', err)
       setCompanies([])
       setCurrentView('company-select')
     }
@@ -61,7 +92,6 @@ function App() {
 
   const handleLogin = async (credentials, mode = 'login') => {
     const { email, password } = credentials
-
     try {
       let userCredential
       if (mode === 'signup') {
@@ -69,25 +99,18 @@ function App() {
       } else {
         userCredential = await signInWithEmailAndPassword(auth, email, password)
       }
-
       const userCred = userCredential.user
-      const idToken = await userCred.getIdToken()
+      const idToken = await userCred.getIdToken(true)
 
-      if (mode === 'signup') {
-        // New user: go straight to company select
-        setUser({ email: userCred.email, uid: userCred.uid });
-        setToken(idToken);
-        localStorage.setItem('releasepeace_token', idToken);
-        localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.email, uid: userCred.uid }));
-        setCurrentView('company-select');
-        return;
-      }
-
-      // fallback for login
       setUser({ email: userCred.email, uid: userCred.uid })
       setToken(idToken)
       localStorage.setItem('releasepeace_token', idToken)
       localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.email, uid: userCred.uid }))
+
+      if (mode === 'signup') {
+        setCurrentView('company-select')
+        return
+      }
       await fetchUserCompanies(idToken)
     } catch (error) {
       console.error('❌ Login error:', error)
@@ -99,17 +122,14 @@ function App() {
     try {
       const provider = new GoogleAuthProvider()
       const result = await signInWithPopup(auth, provider)
-
       const userCred = result.user
-      const idToken = await userCred.getIdToken()
+      const idToken = await userCred.getIdToken(true)
 
-      // Persist
       localStorage.setItem('releasepeace_token', idToken)
       localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.email, uid: userCred.uid }))
       setUser({ email: userCred.email, uid: userCred.uid })
       setToken(idToken)
 
-      // Load companies & navigate
       await fetchUserCompanies(idToken)
     } catch (err) {
       console.error('❌ Google sign-in failed:', err)
@@ -117,16 +137,10 @@ function App() {
     }
   }
 
-  // 🔑 Select company (no server round-trip required for mock API)
-  const handleCompanySelect = async (company, authToken = token) => {
-    try {
-      setSelectedCompany(company)
-      localStorage.setItem('releasepeace_company', JSON.stringify(company))
-      setCurrentView('dashboard')
-    } catch (error) {
-      console.error('Company selection error:', error)
-      throw error
-    }
+  const handleCompanySelect = async (company) => {
+    setSelectedCompany(company)
+    localStorage.setItem('releasepeace_company', JSON.stringify(company))
+    setCurrentView('dashboard')
   }
 
   const handleLogout = () => {
@@ -135,8 +149,6 @@ function App() {
     setCompanies([])
     setSelectedCompany(null)
     setCurrentView('login')
-
-    // Clear localStorage
     localStorage.removeItem('releasepeace_token')
     localStorage.removeItem('releasepeace_user')
     localStorage.removeItem('releasepeace_company')
@@ -148,7 +160,6 @@ function App() {
     setCurrentView('company-select')
   }
 
-  // Render based on current view
   switch (currentView) {
     case 'login':
       return (
@@ -158,7 +169,6 @@ function App() {
           onBack={() => setCurrentView('landing')}
         />
       )
-
     case 'company-select':
       return (
         <CompanySelector
@@ -170,18 +180,17 @@ function App() {
           onCompaniesUpdate={setCompanies}
         />
       )
-
     case 'dashboard':
       return (
         <Dashboard
           user={user}
           company={selectedCompany}
           token={token}
+          getToken={getFreshToken}  // 🔑 pass refresher
           onLogout={handleLogout}
           onSwitchCompany={handleBackToCompanySelect}
         />
       )
-    
     default:
       return <LandingPage onEnterApp={() => setCurrentView('login')} />
   }
