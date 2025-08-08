@@ -1,3 +1,31 @@
+// Get specific company by ID (for role management, etc.)
+router.get('/:companyId', authMiddleware, async (req, res) => {
+  try {
+    const companyId = req.params.companyId;
+
+    const company = await Company.findByPk(companyId);
+    if (!company || !company.is_active) {
+      return res.status(404).json({ error: 'Company not found' });
+    }
+
+    res.json({
+      success: true,
+      company: {
+        id: company.id,
+        name: company.name,
+        subdomain: company.subdomain,
+        plan: company.plan,
+        invite_code: company.invite_code,
+        domain: company.domain,
+        owner_id: company.owner_id,
+        settings: company.settings
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching company by ID:', err);
+    res.status(500).json({ error: 'Failed to fetch company details' });
+  }
+});
 // backend/src/routes/companies.js - COMPLETE FILE
 const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
