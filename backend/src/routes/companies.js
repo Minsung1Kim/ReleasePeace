@@ -107,11 +107,12 @@ router.post('/join', authMiddleware, async (req, res) => {
     });
     if (existing) return res.status(400).json({ error: 'Already a member of this company' });
 
-    const safeRole = (role || 'member').toLowerCase();
+    const rawRole = (role || 'pm').toLowerCase();
+    const safeRole = (rawRole === 'member') ? 'pm' : rawRole;
     await UserCompany.create({
       user_id: userId,
       company_id: company.id,
-      role: ['owner', 'pm', 'engineer', 'qa', 'legal', 'member'].includes(safeRole) ? safeRole : 'member',
+      role: ['owner', 'pm', 'engineer', 'qa', 'legal'].includes(safeRole) ? safeRole : 'pm',
       status: 'active',
       joined_at: new Date(),
     });
@@ -205,7 +206,7 @@ router.patch('/:companyId/users/:userId/role', authMiddleware, extractCompanyCon
     if (company.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the owner can change roles' });
     }
-    const allowed = ['owner', 'pm', 'engineer', 'qa', 'legal', 'member'];
+    const allowed = ['owner', 'pm', 'engineer', 'qa', 'legal'];
     if (!allowed.includes(String(new_role).toLowerCase())) {
       return res.status(400).json({ error: 'Invalid role' });
     }

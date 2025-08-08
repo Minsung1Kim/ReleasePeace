@@ -62,7 +62,7 @@ async function getOrCreateUserFromFirebase(payload) {
       username,
       email,
       display_name: payload.name || username,
-      role: 'member',
+      role: 'pm',
       is_active: true
     });
     console.log('👤 Created DB user from Firebase:', user.id, username);
