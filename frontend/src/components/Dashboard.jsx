@@ -69,6 +69,8 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
       setLoading(false)
     }
   }
+
+ // Add this function
   
   // Modal role change handler (soft update)
   const handleRoleChange = async (userId, newRole) => {
@@ -430,29 +432,30 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
 
       </div>
       {showRoleModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-[var(--rp-card-bg)] p-6 rounded-lg shadow-lg max-w-lg w-full">
-            <h2 className="text-xl font-bold mb-4">Manage Roles</h2>
-            {companyMembers.length > 0 ? (
-              <ul className="space-y-2">
-                {companyMembers.map(member => (
-                  <li key={member.id} className="flex justify-between items-center">
-                    <span>{member.display_name || member.username}</span>
-                    <span className="text-sm text-gray-400">{member.role}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-gray-400">No members found.</p>
-            )}
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={() => setShowRoleModal(false)}
-                className="px-4 py-2 bg-[var(--rp-accent)] rounded"
-              >
-                Close
-              </button>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="rp-card max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Manage Roles</h2>
+              <button className="rp-badge" onClick={() => setShowRoleModal(false)}>Close</button>
             </div>
+
+            {companyMembers.length === 0 ? (
+              <p className="text-sm text-[var(--rp-muted)]">
+                No members found. (Tip: make sure you’re the owner and that the request included <code>X-Company-ID</code>.)
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {companyMembers.map(m => (
+                  <div key={m.id} className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium">{m.display_name || m.username}</div>
+                      <div className="text-xs text-[var(--rp-muted)]">{m.email}</div>
+                    </div>
+                    <span className="rp-badge">{m.role}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
