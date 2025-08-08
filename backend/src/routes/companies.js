@@ -252,4 +252,41 @@ router.post('/:companyId/regenerate-invite', authMiddleware, extractCompanyConte
   }
 });
 
+// PATCH /companies/:companyId/users/:userId/role
+router.patch('/:companyId/users/:userId/role', authMiddleware, extractCompanyContext, async (req, res) => {
+  const { userId, companyId } = req.params;
+  const { new_role } = req.body;
+
+  if (!['owner', 'pm', 'engineer', 'viewer'].includes(new_role)) {
+    return res.status(400).json({ error: 'Invalid role' });
+  }
+
+  try {
+    const actingUser = req.user;
+    const company = req.company;
+
+    // Only owner can update roles
+    if (company.owner_id !== actingUser.id) {
+      return res.status(403).json({ error: 'Only the owner can change roles' });
+    }
+
+    const membership = await UserCompany.findOne({
+      where: {
+        user_id: userId,
+        company_id: company.id
+      }
+    });
+
+    if (!membership) return res.status(404).json({ error: 'User not found in company' });
+
+    membership.role = new_role;
+    await membership.save();
+
+    res.json({ success: true, message: 'Role updated', role: new_role });
+  } catch (error) {
+    console.error('Error updating role:', error);
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
 module.exports = router;

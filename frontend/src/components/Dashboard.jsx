@@ -14,6 +14,28 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   const canCreate = ['owner','pm'].includes(userRole)
   const canToggle = ['owner','pm','engineer'].includes(userRole)
 
+  // Handler for role change in Manage Roles dropdown
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      const res = await fetch(`${config.apiUrl}/api/companies/${company.id}/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ new_role: newRole })
+      });
+
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to update role');
+
+      // Refetch company to update UI
+      onSwitchCompany();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
 
   useEffect(() => {
     // Test API connection
@@ -375,6 +397,30 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
             • Your Role: {company?.role}
           </div>
         </div>
+
+        {/* Manage Roles (Owner Only) */}
+        {company?.role === 'owner' && (
+          <div className="mt-8 rp-card p-6">
+            <h3 className="rp-heading font-semibold mb-4">Manage Roles</h3>
+            {company.members?.map(member => (
+              <div key={member.id} className="flex items-center justify-between mb-2">
+                <div>
+                  <div className="text-sm font-medium">{member.display_name || member.username}</div>
+                  <div className="text-xs text-[var(--rp-muted)]">{member.email}</div>
+                </div>
+                <select
+                  value={member.role}
+                  onChange={e => handleRoleChange(member.id, e.target.value)}
+                  className="text-sm border rounded px-2 py-1 bg-white"
+                >
+                  {['owner', 'pm', 'engineer', 'viewer'].map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
