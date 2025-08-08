@@ -63,6 +63,12 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Auth sanity check endpoint
+const { authMiddleware } = require('./middleware/auth');
+app.get('/api/whoami', authMiddleware, (req, res) => {
+  res.json({ ok: true, user: { id: req.user.id, username: req.user.username, email: req.user.email } });
+});
+
 // Initialize database connection
 let dbConnected = false;
 let User, Company, UserCompany, FeatureFlag, FlagState;

@@ -1,151 +1,137 @@
-// backend/src/middleware/auth.js
-// Dual-mode auth: accepts local JWT (JWT_SECRET) OR Firebase ID token.
-// Creates/updates a DB user from Firebase claims when needed.
+const jwt = require('jsonwebtoken');
+const { User } = require('../models');
 
-const jwt = require('jsonwebtoken')
-const { User } = require('../models')
-
-let admin = null
-function initFirebaseAdmin() {
-  if (admin) return admin
+let admin = null;
+function ensureFirebaseAdmin() {
+  if (admin) return admin;
   try {
-    // Lazy require to avoid startup failure if not installed
-    // Install: npm i firebase-admin
-    admin = require('firebase-admin')
-
+    admin = require('firebase-admin');
     if (admin.apps.length === 0) {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        const creds = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-        admin.initializeApp({ credential: admin.credential.cert(creds) })
+        const svc = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        admin.initializeApp({ credential: admin.credential.cert(svc) });
+        console.log('✅ Firebase Admin initialized from FIREBASE_SERVICE_ACCOUNT');
       } else {
-        // Will use ADC if GOOGLE_APPLICATION_CREDENTIALS is set
-        admin.initializeApp()
+        admin.initializeApp(); // ADC path if configured
+        console.log('✅ Firebase Admin initialized with ADC');
       }
     }
   } catch (e) {
-    admin = null
+    admin = null;
+    console.warn('⚠️ Firebase Admin not available. Only local JWTs will work.');
   }
-  return admin
+  return admin;
 }
 
 async function verifyLocalJWT(token) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key_change_this')
-    return { kind: 'local', payload: decoded }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_secret_key_change_this');
+    return decoded && decoded.userId ? decoded : null;
   } catch {
-    return null
+    return null;
   }
 }
 
 async function verifyFirebaseToken(token) {
-  const fb = initFirebaseAdmin()
-  if (!fb) return null
+  const fb = ensureFirebaseAdmin();
+  if (!fb) return null;
   try {
-    const payload = await fb.auth().verifyIdToken(token)
-    return { kind: 'firebase', payload }
-  } catch {
-    return null
+    const payload = await fb.auth().verifyIdToken(token);
+    return payload || null;
+  } catch (err) {
+    return null;
   }
 }
 
 async function getOrCreateUserFromFirebase(payload) {
-  // Prefer email; fallback to uid if no email.
-  const email = payload.email || `${payload.uid}@firebase.local`
-  const username = (email.split('@')[0] || payload.uid).toLowerCase()
+  const email = payload.email || `${payload.uid}@firebase.local`;
+  const username = (email.split('@')[0] || payload.uid).toLowerCase();
 
-  // Try to find by email first
-  let user = await User.findOne({ where: { email } })
-  if (!user) {
-    // Fallback to username
-    user = await User.findOne({ where: { username } })
-  }
+  // Try by email, then username
+  let user = await User.findOne({ where: { email } });
+  if (!user) user = await User.findOne({ where: { username } });
 
   if (!user) {
     user = await User.create({
       username,
       email,
       display_name: payload.name || username,
-      role: 'member',           // default; app-level role in company handled separately
-      is_active: true
-    })
+      role: 'member',     // global user role; company-specific role handled in UserCompany
+      is_active: true,
+    });
+    console.log('👤 Created user from Firebase:', user.id, username);
   } else if (!user.is_active) {
-    // Soft reactivate if needed
-    await user.update({ is_active: true })
+    await user.update({ is_active: true });
   }
 
-  return user
+  return user;
 }
 
 const authMiddleware = async (req, res, next) => {
   try {
-    const raw = req.header('Authorization') || ''
-    const token = raw.startsWith('Bearer ') ? raw.slice(7) : null
+    const raw = req.header('Authorization') || '';
+    const token = raw.startsWith('Bearer ') ? raw.slice(7) : null;
 
     if (!token) {
-      return res.status(401).json({ error: 'Access denied', message: 'No token provided' })
+      return res.status(401).json({ error: 'Access denied', message: 'No token provided' });
     }
 
-    // 1) Try local JWT first
-    const local = await verifyLocalJWT(token)
-    if (local?.payload?.userId) {
-      const user = await User.findByPk(local.payload.userId)
+    // 1) Local JWT
+    const local = await verifyLocalJWT(token);
+    if (local?.userId) {
+      const user = await User.findByPk(local.userId);
       if (!user || !user.is_active) {
-        return res.status(401).json({ error: 'Access denied', message: 'Invalid token' })
+        return res.status(401).json({ error: 'Access denied', message: 'Invalid token' });
       }
-      req.user = user
-      return next()
+      req.user = user;
+      return next();
     }
 
-    // 2) Fallback: verify Firebase ID token
-    const fb = await verifyFirebaseToken(token)
-    if (fb?.payload) {
-      const user = await getOrCreateUserFromFirebase(fb.payload)
-      req.user = user
-      return next()
+    // 2) Firebase ID token
+    const fb = await verifyFirebaseToken(token);
+    if (fb?.uid) {
+      const user = await getOrCreateUserFromFirebase(fb);
+      req.user = user;
+      return next();
     }
 
-    // 3) Nothing verified
-    return res.status(401).json({ error: 'Access denied', message: 'Invalid token' })
-  } catch (error) {
-    console.error('Auth middleware error:', error)
-    return res.status(401).json({ error: 'Access denied', message: 'Invalid token' })
+    return res.status(401).json({ error: 'Access denied', message: 'Invalid token' });
+  } catch (err) {
+    console.error('Auth middleware error:', err);
+    return res.status(401).json({ error: 'Access denied', message: 'Invalid token' });
   }
-}
+};
 
-// Optional auth - doesn't fail if no token
 const optionalAuth = async (req, res, next) => {
   try {
-    const raw = req.header('Authorization') || ''
-    const token = raw.startsWith('Bearer ') ? raw.slice(7) : null
-    if (!token) return next()
+    const raw = req.header('Authorization') || '';
+    const token = raw.startsWith('Bearer ') ? raw.slice(7) : null;
+    if (!token) return next();
 
-    const local = await verifyLocalJWT(token)
-    if (local?.payload?.userId) {
-      const user = await User.findByPk(local.payload.userId)
-      if (user?.is_active) req.user = user
-      return next()
+    const local = await verifyLocalJWT(token);
+    if (local?.userId) {
+      const user = await User.findByPk(local.userId);
+      if (user?.is_active) req.user = user;
+      return next();
     }
 
-    const fb = await verifyFirebaseToken(token)
-    if (fb?.payload) {
-      const user = await getOrCreateUserFromFirebase(fb.payload)
-      req.user = user
+    const fb = await verifyFirebaseToken(token);
+    if (fb?.uid) {
+      const user = await getOrCreateUserFromFirebase(fb);
+      req.user = user;
     }
-    return next()
+    return next();
   } catch {
-    return next()
+    return next();
   }
-}
+};
 
-// Role-based (global user-level) — keep if you need it elsewhere
-const requireRole = (allowedRoles) => {
-  return (req, res, next) => {
-    if (!req.user) return res.status(401).json({ error: 'Access denied', message: 'Authentication required' })
-    if (!allowedRoles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Access denied', message: 'Insufficient permissions' })
-    }
-    next()
+const requireRole = (roles) => (req, res, next) => {
+  if (!req.user) return res.status(401).json({ error: 'Access denied', message: 'Authentication required' });
+  if (!roles.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Access denied', message: 'Insufficient permissions' });
   }
-}
+  next();
+};
 
-module.exports = { authMiddleware, optionalAuth, requireRole }
+module.exports = { authMiddleware, optionalAuth, requireRole };
