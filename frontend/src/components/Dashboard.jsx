@@ -1,14 +1,14 @@
-  const companyPathParam = () => {
-    const id = company?.id || '';
-    const sub = company?.subdomain || '';
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return uuidRe.test(id) ? id : (sub || id);
-  };
 // frontend/src/components/Dashboard.jsx - ENHANCED VERSION WITH YOUR THEME
 import React, { useState, useEffect } from 'react'
 import { config } from '../config'
 
 const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }) => {
+const companyPathParam = React.useCallback(() => {
+  const id = company?.id || '';
+  const sub = company?.subdomain || '';
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRe.test(id) ? id : (sub || id);
+}, [company]);
   const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id
   const [apiStatus, setApiStatus] = useState('checking...')
   const [flags, setFlags] = useState([])
@@ -103,13 +103,9 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   // Modal role change handler (soft update)
   const handleRoleChange = async (userId, newRole) => {
     try {
-      const res = await fetch(`${config.apiUrl}/api/companies/${companyId}/users/${userId}/role`, {
+      const res = await authedFetch(`/api/companies/${companyPathParam()}/users/${userId}/role`, {
         method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-Company-ID': companyId
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_role: newRole })
       })
 
@@ -652,7 +648,7 @@ const ManageRolesModal = ({ members, onClose, onChangeRole }) => {
                   onChange={e => onChangeRole(member.id, e.target.value)}
                   className="text-sm border px-2 py-1 rounded bg-white"
                 >
-                  {['owner', 'pm', 'engineer', 'viewer'].map(role => (
+                  {['owner', 'pm', 'engineer', 'qa', 'legal'].map(role => (
                     <option key={role} value={role}>{role}</option>
                   ))}
                 </select>
