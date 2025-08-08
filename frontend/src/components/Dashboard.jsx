@@ -11,6 +11,23 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   const [activeEnvironment, setActiveEnvironment] = useState('production')
   const [showCreateFlag, setShowCreateFlag] = useState(false)
   const [showRoleModal, setShowRoleModal] = useState(false)
+  const [companyMembers, setCompanyMembers] = useState([])
+  // Fetch company with members for modal
+  const fetchCompanyWithMembers = async () => {
+    try {
+      const res = await fetch(`${config.apiUrl}/api/companies/${company.id}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success && data.company.members) {
+        setCompanyMembers(data.company.members);
+      }
+    } catch (err) {
+      console.error('Failed to fetch company members:', err);
+    }
+  } 
   const userRole = company?.role || 'member'
   const canCreate = ['owner','pm'].includes(userRole)
   const canToggle = ['owner','pm','engineer'].includes(userRole)
@@ -390,8 +407,11 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
           <h3 className="font-semibold rp-heading mb-2">🎉 Multi-Tenant Setup Complete!</h3>
           {company?.role === 'owner' && (
             <button
-              onClick={() => setShowRoleModal(true)}
-              className="mt-4 px-4 py-2 border text-sm font-medium rounded-md rp-btn-secondary"
+              onClick={async () => {
+                await fetchCompanyWithMembers();
+                setShowRoleModal(true);
+              }}
+              className="px-3 py-2 bg-[var(--rp-accent)] rounded-md"
             >
               Manage Roles
             </button>
@@ -408,30 +428,34 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
           </div>
         </div>
 
-        {/* Manage Roles (Owner Only) */}
-        {company?.role === 'owner' && (
-          <div className="mt-8 rp-card p-6">
-            <h3 className="rp-heading font-semibold mb-4">Manage Roles</h3>
-            {company.members?.map(member => (
-              <div key={member.id} className="flex items-center justify-between mb-2">
-                <div>
-                  <div className="text-sm font-medium">{member.display_name || member.username}</div>
-                  <div className="text-xs text-[var(--rp-muted)]">{member.email}</div>
-                </div>
-                <select
-                  value={member.role}
-                  onChange={e => handleRoleChange(member.id, e.target.value)}
-                  className="text-sm border rounded px-2 py-1 bg-white"
-                >
-                  {['owner', 'pm', 'engineer', 'viewer'].map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
+      {showRoleModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[var(--rp-card-bg)] p-6 rounded-lg shadow-lg max-w-lg w-full">
+            <h2 className="text-xl font-bold mb-4">Manage Roles</h2>
+            {companyMembers.length > 0 ? (
+              <ul className="space-y-2">
+                {companyMembers.map(member => (
+                  <li key={member.id} className="flex justify-between items-center">
+                    <span>{member.display_name || member.username}</span>
+                    <span className="text-sm text-gray-400">{member.role}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-400">No members found.</p>
+            )}
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => setShowRoleModal(false)}
+                className="px-4 py-2 bg-[var(--rp-accent)] rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
