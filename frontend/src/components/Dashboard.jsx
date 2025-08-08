@@ -28,7 +28,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
       const response = await fetch(`${config.apiUrl}/api/flags`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'X-Company-ID': company.id
+          'X-Company-ID': company?.id
         }
       })
 
@@ -54,7 +54,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Company-ID': company.id
+          'X-Company-ID': company?.id
         },
         body: JSON.stringify(flagData)
       })
@@ -80,7 +80,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Company-ID': company.id
+          'X-Company-ID': company?.id
         },
         body: JSON.stringify({
           is_enabled: !currentState.is_enabled
@@ -143,11 +143,11 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
                   <span className="font-medium">{company?.name || 'No company selected'}</span>
                   <span className="mx-2">•</span>
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
-                    company.plan === 'enterprise' ? 'bg-purple-100 text-purple-800' :
-                    company.plan === 'pro' ? 'bg-blue-100 text-blue-800' :
+                    company?.plan === 'enterprise' ? 'bg-purple-100 text-purple-800' :
+                    company?.plan === 'pro' ? 'bg-blue-100 text-blue-800' :
                     'bg-green-100 text-green-800'
                   }`}>
-                    {company.plan}
+                    {company?.plan || 'unknown'}
                   </span>
                 </div>
               </div>
@@ -164,7 +164,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
               </button>
               <div className="text-sm text-gray-500 border-l pl-4">
                 <div className="font-medium">{user.display_name || user.username}</div>
-                <div className="text-xs">{user.role} • {company.role}</div>
+                <div className="text-xs">{user.role} • {company?.role}</div>
               </div>
               <button
                 onClick={onLogout}
@@ -357,14 +357,14 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
           <h3 className="font-semibold text-blue-900 mb-2">🎉 Multi-Tenant Setup Complete!</h3>
           <p className="text-blue-800 text-sm mb-2">
-            You're viewing flags for <strong>{company.name}</strong>. Each company has completely isolated data.
+            You're viewing flags for <strong>{company?.name}</strong>. Each company has completely isolated data.
           </p>
           <div className="text-blue-700 text-sm">
             <strong>Company Details:</strong><br/>
-            • Name: {company.name}<br/>
-            • Subdomain: {company.subdomain}<br/>
-            • Plan: {company.plan}<br/>
-            • Your Role: {company.role}
+            • Name: {company?.name}<br/>
+            • Subdomain: {company?.subdomain}<br/>
+            • Plan: {company?.plan}<br/>
+            • Your Role: {company?.role}
           </div>
         </div>
       </div>
