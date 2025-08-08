@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* === Global theme (copied from LandingPage palette) === */
+/* === Global theme (copied from LandingPage.css) === */
 :root {
   --rp-primary: #F9D142;         /* primary yellow */
   --rp-bg: #292826;              /* deep charcoal */
@@ -14,87 +14,64 @@
   --rp-accent: rgba(249, 209, 66, 0.08);
 }
 
-/* Base page setup */
-html, body, #root {
-  height: 100%;
-}
-
+/* Base reset + fonts */
+html, body, #root { height:100%; }
 body {
   margin: 0;
   background: var(--rp-bg);
   color: var(--rp-text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
-    'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* === Utility classes you can use anywhere === */
+/* Utility classes */
 .rp-card {
   background: var(--rp-card-bg);
   border: 1px solid var(--rp-border);
   border-radius: 0.75rem;
 }
-
 .rp-btn-primary {
   background: var(--rp-primary);
   color: #111;
+  transition: opacity .2s;
 }
 .rp-btn-primary:hover { opacity: .9; }
-
 .rp-input {
   background: var(--rp-input-bg);
   color: var(--rp-text);
   border: 1px solid var(--rp-border);
+  border-radius: .375rem;
+  padding: .5rem;
 }
-
-/* Badges / subtle chips */
 .rp-badge {
   background: var(--rp-accent);
   color: var(--rp-text);
   border: 1px solid var(--rp-border);
   border-radius: 9999px;
-  padding: 0.125rem 0.5rem;
-  font-size: 0.75rem;
+  padding: .125rem .5rem;
+  font-size: .75rem;
 }
-
-/* Links */
 .rp-link { color: var(--rp-primary); }
 .rp-link:hover { text-decoration: underline; }
 
-/* === Tailwind color overrides so existing components auto-match the theme === */
-
-/* Surfaces */
+/* === Override Tailwind defaults === */
 .bg-white,
 .bg-gray-50,
 .bg-gray-100 { background-color: var(--rp-card-bg) !important; }
-
-/* Text */
 .text-gray-900,
 .text-gray-800 { color: var(--rp-text) !important; }
-
 .text-gray-700,
 .text-gray-600,
 .text-gray-500 { color: var(--rp-text-muted) !important; }
-
-/* Borders / dividers */
 .border-gray-200,
 .border-gray-300 { border-color: var(--rp-border) !important; }
-
 .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
   border-color: var(--rp-border) !important;
 }
-
-/* Brand accents (map “blue/green” to your yellow) */
 .bg-blue-600,
 .hover\:bg-blue-700:hover { background-color: var(--rp-primary) !important; }
-
 .text-blue-600 { color: var(--rp-primary) !important; }
-
-/* ring color for focus */
 .focus\:ring-blue-500:focus { --tw-ring-color: var(--rp-primary) !important; }
-
-/* Treat green status dots as “brand” too */
 .bg-green-500,
-.text-green-600 { background-color: var(--rp-primary) !important; color: #111 !important; }
+.text-green-600 { background-color: var(--rp-primary) !important; color:#111!important; }
