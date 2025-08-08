@@ -502,6 +502,10 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Route setup
+app.use('/api/companies', require('./routes/companies'));
+// ...add other route setups here as needed
+
 // 404 handler
 app.use('*', (req, res) => {
   res.status(404).json({
