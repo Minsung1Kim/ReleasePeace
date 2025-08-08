@@ -10,6 +10,10 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   const [selectedFlag, setSelectedFlag] = useState(null)
   const [activeEnvironment, setActiveEnvironment] = useState('production')
   const [showCreateFlag, setShowCreateFlag] = useState(false)
+  const userRole = company?.role || 'member'
+  const canCreate = ['owner','pm'].includes(userRole)
+  const canToggle = ['owner','pm','engineer'].includes(userRole)
+
 
   useEffect(() => {
     // Test API connection
@@ -223,12 +227,14 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
                 ))}
               </div>
             </div>
-            <button
-              onClick={() => setShowCreateFlag(true)}
-              className="px-4 py-2 rp-btn-primary rounded-md text-sm font-semibold"
-            >
-              + Create Flag
-            </button>
+            {canCreate && (
+              <button
+                onClick={() => setShowCreateFlag(true)}
+                className="px-4 py-2 rp-btn-primary rounded-md text-sm font-semibold"
+              >
+                + Create Flag
+              </button>
+            )}
           </div>
         </div>
 
@@ -319,8 +325,12 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
                               </span>
                             </div>
                             <button
-                              onClick={() => toggleFlagState(flag.id, activeEnvironment, currentEnvState)}
-                              className="px-3 py-1 rounded text-xs font-medium rp-btn-primary"
+                              onClick={() => canToggle
+                                ? toggleFlagState(flag.id, activeEnvironment, currentEnvState)
+                                : alert('You do not have permission to toggle flags.')
+                              }
+                              className="px-3 py-1 rounded text-xs font-medium rp-btn-primary disabled:opacity-50"
+                              disabled={!canToggle}
                             >
                               {currentEnvState.is_enabled ? 'Disable' : 'Enable'}
                             </button>

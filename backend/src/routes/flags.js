@@ -1,5 +1,7 @@
 // backend/src/routes/flags.js - COMPLETE FILE
 const express = require('express');
+const { requireRole } = require('../middleware/roles');
+
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
 const flagService = require('../services/flagService');
@@ -84,7 +86,7 @@ router.get('/:id', authMiddleware, extractCompanyContext, requireCompanyMembersh
 });
 
 // CREATE new flag
-router.post('/', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
+router.post('/', authMiddleware, extractCompanyContext, requireRole('owner','pm'), async (req, res) => {
   try {
     const { name, description, flag_type, risk_level, tags, metadata } = req.body;
 
@@ -268,7 +270,7 @@ router.delete('/:id', authMiddleware, extractCompanyContext, requireCompanyMembe
 });
 
 // UPDATE flag state for specific environment
-router.put('/:id/state/:environment', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
+router.put('/:flagId/state/:environment', authMiddleware, extractCompanyContext, requireRole('owner','pm','engineer'), async (req, res) => {
   try {
     const { id, environment } = req.params;
     const { is_enabled, rollout_percentage, targeting_rules } = req.body;
