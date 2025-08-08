@@ -115,20 +115,24 @@ const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider()
     const result = await signInWithPopup(auth, provider)
 
-    const user = result.user
-    const idToken = await user.getIdToken()
+    const userCred = result.user
+    const idToken = await userCred.getIdToken()
 
-    console.log('✅ Google user:', user)
+    console.log('✅ Google user:', userCred)
 
+    // Persist auth state
     localStorage.setItem('releasepeace_token', idToken)
-    localStorage.setItem('releasepeace_user', JSON.stringify({
-      email: user.email,
-      uid: user.uid
-    }))
+    localStorage.setItem(
+      'releasepeace_user',
+      JSON.stringify({ email: userCred.email, uid: userCred.uid })
+    )
 
-    setUser({ email: user.email, uid: user.uid })
+    // Update local state
+    setUser({ email: userCred.email, uid: userCred.uid })
     setToken(idToken)
-    setCurrentView('dashboard')
+
+    // Now fetch this user’s companies and navigate accordingly
+    await fetchUserCompanies(idToken)
   } catch (err) {
     console.error('❌ Google sign-in failed:', err)
     alert('Google login failed')
@@ -198,13 +202,16 @@ const handleGoogleLogin = async () => {
     )
 
     case 'company-select':
-      return (
-        <JoinOrCreateCompany
-          token={token}
-          onCompanySelect={handleCompanySelect}
-          onLogout={handleLogout}
-        />
-      )
+     return (
+       <CompanySelector
+         user={user}
+         companies={companies}
+         token={token}
+        onCompanySelect={handleCompanySelect}
+         onLogout={handleLogout}
+        onCompaniesUpdate={setCompanies}
+       />
+     )
 
     
     case 'dashboard':
