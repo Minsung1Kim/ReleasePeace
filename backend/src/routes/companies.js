@@ -2,14 +2,11 @@
 const express = require('express');
 const crypto = require('crypto');
 const { authMiddleware } = require('../middleware/auth');
-const { extractCompanyContext } = require('../middleware/company');
+const { extractCompanyContext } = require('../middleware/company'); // keep if you use it elsewhere
 const { Company, UserCompany, User } = require('../models');
 
 const router = express.Router();
 
-/**
- * Helper to shape member rows
- */
 function toMemberList(rows) {
   return rows.map((m) => ({
     id: m.user.id,
@@ -21,15 +18,10 @@ function toMemberList(rows) {
   }));
 }
 
-/**
- * POST /api/companies
- * Create a company; creator becomes owner
- */
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const { name, subdomain, domain } = req.body;
     const userId = req.user.id;
-
     if (!name) return res.status(400).json({ error: 'Company name is required' });
 
     const inviteCode = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -72,10 +64,6 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-/**
- * GET /api/companies/mine
- * List companies for current user
- */
 router.get('/mine', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
@@ -102,10 +90,6 @@ router.get('/mine', authMiddleware, async (req, res) => {
   }
 });
 
-/**
- * POST /api/companies/join
- * Join a company by invite code
- */
 router.post('/join', authMiddleware, async (req, res) => {
   try {
     const { invite_code, role } = req.body;
@@ -116,7 +100,6 @@ router.post('/join', authMiddleware, async (req, res) => {
     const company = await Company.findOne({
       where: { invite_code: String(invite_code).toUpperCase(), is_active: true },
     });
-
     if (!company) return res.status(404).json({ error: 'Invalid invite code' });
 
     const existing = await UserCompany.findOne({
@@ -128,9 +111,7 @@ router.post('/join', authMiddleware, async (req, res) => {
     await UserCompany.create({
       user_id: userId,
       company_id: company.id,
-      role: ['owner', 'pm', 'engineer', 'qa', 'legal', 'member'].includes(safeRole)
-        ? safeRole
-        : 'member',
+      role: ['owner', 'pm', 'engineer', 'qa', 'legal', 'member'].includes(safeRole) ? safeRole : 'member',
       status: 'active',
       joined_at: new Date(),
     });
@@ -146,29 +127,33 @@ router.post('/join', authMiddleware, async (req, res) => {
   }
 });
 
-/**
- * GET /api/companies/:companyId
- * Return company details + members + viewer_role
- * (This is the route your modal calls.)
- */
+// ── NEW: accept numeric id, "company_<id>", or subdomain like "demo"
 router.get('/:companyId', authMiddleware, async (req, res) => {
   try {
-    // accept both "175..." and "company_175..."
-    const rawId = String(req.params.companyId || '');
-    const companyId = rawId.startsWith('company_') ? rawId.slice(8) : rawId;
+    const raw = String(req.params.companyId || '');
+    const numericId = raw.startsWith('company_') ? raw.slice(8) : raw;
+    const looksNumeric = /^\d+$/.test(numericId);
 
-    const company = await Company.findByPk(companyId);
+    let company = null;
+    if (looksNumeric) {
+      company = await Company.findByPk(numericId);
+    }
+    if (!company) {
+      // try by subdomain (e.g., /api/companies/demo)
+      company = await Company.findOne({ where: { subdomain: raw, is_active: true } });
+    }
     if (!company || !company.is_active) {
       return res.status(404).json({ error: 'Company not found' });
     }
 
-    // viewer role (for gating actions in UI)
+    // Viewer role (must be member)
     const viewerUC = await UserCompany.findOne({
       where: { user_id: req.user.id, company_id: company.id, status: 'active' },
     });
-    const viewer_role = viewerUC?.role || null;
+    if (!viewerUC) {
+      return res.status(403).json({ error: 'Not a member of this company' });
+    }
 
-    // members
     const members = await UserCompany.findAll({
       where: { company_id: company.id, status: 'active' },
       include: [{ model: User, as: 'user', attributes: ['id', 'username', 'email', 'display_name'] }],
@@ -187,7 +172,7 @@ router.get('/:companyId', authMiddleware, async (req, res) => {
         settings: company.settings,
         member_count: members.length,
         members: toMemberList(members),
-        viewer_role,
+        viewer_role: viewerUC.role,
       },
     });
   } catch (error) {
@@ -196,10 +181,6 @@ router.get('/:companyId', authMiddleware, async (req, res) => {
   }
 });
 
-/**
- * POST /api/companies/:companyId/regenerate-invite
- * Owner only – regenerate invite code
- */
 router.post('/:companyId/regenerate-invite', authMiddleware, extractCompanyContext, async (req, res) => {
   try {
     const company = req.company;
@@ -215,21 +196,15 @@ router.post('/:companyId/regenerate-invite', authMiddleware, extractCompanyConte
   }
 });
 
-/**
- * PATCH /api/companies/:companyId/users/:userId/role
- * Owner only – change a member’s role
- */
 router.patch('/:companyId/users/:userId/role', authMiddleware, extractCompanyContext, async (req, res) => {
   try {
     const { company } = req;
-    const actingUserId = req.user.id;
     const { userId } = req.params;
     const { new_role } = req.body;
 
-    if (company.owner_id !== actingUserId) {
+    if (company.owner_id !== req.user.id) {
       return res.status(403).json({ error: 'Only the owner can change roles' });
     }
-
     const allowed = ['owner', 'pm', 'engineer', 'qa', 'legal', 'member'];
     if (!allowed.includes(String(new_role).toLowerCase())) {
       return res.status(400).json({ error: 'Invalid role' });
