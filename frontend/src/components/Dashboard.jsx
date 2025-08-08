@@ -1,3 +1,9 @@
+  const companyPathParam = () => {
+    const id = company?.id || '';
+    const sub = company?.subdomain || '';
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRe.test(id) ? id : (sub || id);
+  };
 // frontend/src/components/Dashboard.jsx - ENHANCED VERSION WITH YOUR THEME
 import React, { useState, useEffect } from 'react'
 import { config } from '../config'
@@ -48,12 +54,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   // Fetch company with members for modal
   const fetchCompanyWithMembers = async () => {
     try {
-    const res = await fetch(`${config.apiUrl}/api/companies/${companyId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'X-Company-ID': companyId
-      }
-    });
+      const res = await authedFetch(`/api/companies/${companyPathParam()}`);
       const data = await res.json();
       if (data.success && data.company.members) {
         setCompanyMembers(data.company.members);

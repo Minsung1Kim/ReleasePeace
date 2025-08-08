@@ -131,18 +131,26 @@ router.post('/join', authMiddleware, async (req, res) => {
 // ── NEW: accept numeric id, "company_<id>", or subdomain like "demo"
 router.get('/:companyId', authMiddleware, async (req, res) => {
   try {
-    const raw = String(req.params.companyId || '');
-    const numericId = raw.startsWith('company_') ? raw.slice(8) : raw;
-    const looksNumeric = /^\d+$/.test(numericId);
+    // accept: UUID, "company_<uuid>", or subdomain like "demo"
+    const raw = String(req.params.companyId || '').trim();
+
+    // UUID v4-ish regex
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(raw);
+
+    // If prefixed with "company_", strip it once and re-check
+    let unprefixed = raw.startsWith('company_') ? raw.slice(8) : raw;
+    const isUuidAfterStrip = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(unprefixed);
 
     let company = null;
-    if (looksNumeric) {
-      company = await Company.findByPk(numericId);
-    }
-    if (!company) {
-      // try by subdomain (e.g., /api/companies/demo)
+    if (isUuid) {
+      company = await Company.findByPk(raw);
+    } else if (isUuidAfterStrip) {
+      company = await Company.findByPk(unprefixed);
+    } else {
+      // treat as subdomain fallback
       company = await Company.findOne({ where: { subdomain: raw, is_active: true } });
     }
+
     if (!company || !company.is_active) {
       return res.status(404).json({ error: 'Company not found' });
     }
