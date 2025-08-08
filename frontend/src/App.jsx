@@ -37,7 +37,7 @@ function App() {
 
   const fetchUserCompanies = async (authToken) => {
     try {
-      const response = await fetch(`${config.apiUrl}/api/users/me`, {
+      const response = await fetch(`${config.apiUrl}/api/users`, {
         headers: {
           'Authorization': `Bearer ${authToken}`
         }
@@ -80,7 +80,7 @@ function App() {
     localStorage.setItem('releasepeace_user', JSON.stringify({ email: user.email, uid: user.uid }))
 
     // 🔍 Fetch user's companies
-    const response = await fetch(`${config.apiUrl}/api/users/me`, {
+    const response = await fetch(`${config.apiUrl}/api/users`, {
       headers: {
         Authorization: `Bearer ${idToken}`
       }
