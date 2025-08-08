@@ -279,71 +279,6 @@ app.get('/api/users', (req, res) => {
 
 // ========== COMPANY ROUTES ==========
 
-app.get('/api/companies/mine', (req, res) => {
-  // Mock response for companies
-  res.json({
-    success: true,
-    companies: [{
-      id: 'company_demo',
-      name: 'Demo Company',
-      subdomain: 'demo',
-      role: 'owner',
-      plan: 'starter'
-    }],
-    message: 'Mock companies endpoint'
-  });
-});
-
-app.get('/api/companies', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Companies endpoint working',
-    endpoints: {
-      mine: 'GET /api/companies/mine',
-      create: 'POST /api/companies',
-      join: 'POST /api/companies/join'
-    },
-    timestamp: new Date().toISOString()
-  });
-});
-
-app.post('/api/companies', (req, res) => {
-  const { name, subdomain } = req.body;
-  
-  res.json({
-    success: true,
-    company: {
-      id: `company_${Date.now()}`,
-      name: name || 'New Company',
-      subdomain: subdomain || 'new-company',
-      role: 'owner',
-      invite_code: 'DEMO123'
-    },
-    message: 'Mock company creation'
-  });
-});
-
-app.post('/api/companies/join', (req, res) => {
-  const { invite_code } = req.body;
-  
-  if (!invite_code) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invite code is required'
-    });
-  }
-
-  res.json({
-    success: true,
-    company: {
-      id: 'company_joined',
-      name: 'Joined Company',
-      role: 'member'
-    },
-    message: 'Successfully joined company (mock)'
-  });
-});
-
 // ========== FLAG ROUTES ==========
 
 app.get('/api/flags', (req, res) => {
@@ -508,11 +443,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Route setup
+// ✅ mount real companies router BEFORE 404
 app.use('/api/companies', require('./routes/companies'));
-// ...add other route setups here as needed
 
-// 404 handler
+// ❗ keep this LAST
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Route not found',
@@ -523,7 +457,6 @@ app.use('*', (req, res) => {
       '/api/users/login',
       '/api/users',
       '/api/companies',
-      '/api/companies/mine',
       '/api/flags',
       '/sdk'
     ]
