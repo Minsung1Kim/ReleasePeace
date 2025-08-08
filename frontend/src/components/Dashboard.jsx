@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react'
 import { config } from '../config'
 
 const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
+  const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id
   const [apiStatus, setApiStatus] = useState('checking...')
   const [flags, setFlags] = useState([])
   const [loading, setLoading] = useState(true)
@@ -15,11 +16,12 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   // Fetch company with members for modal
   const fetchCompanyWithMembers = async () => {
     try {
-      const res = await fetch(`${config.apiUrl}/api/companies/${company.id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+    const res = await fetch(`${config.apiUrl}/api/companies/${companyId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-Company-ID': companyId
+      }
+    });
       const data = await res.json();
       if (data.success && data.company.members) {
         setCompanyMembers(data.company.members);
@@ -51,7 +53,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
       const response = await fetch(`${config.apiUrl}/api/flags`, {
         headers: {
           'Authorization': `Bearer ${token}`,
-          'X-Company-ID': company?.id
+          'X-Company-ID': companyId
         }
       })
 
@@ -75,11 +77,12 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   // Modal role change handler (soft update)
   const handleRoleChange = async (userId, newRole) => {
     try {
-      const res = await fetch(`${config.apiUrl}/api/companies/${company.id}/users/${userId}/role`, {
+      const res = await fetch(`${config.apiUrl}/api/companies/${companyId}/users/${userId}/role`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-Company-ID': companyId
         },
         body: JSON.stringify({ new_role: newRole })
       })
@@ -101,7 +104,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Company-ID': company?.id
+          'X-Company-ID': companyId
         },
         body: JSON.stringify(flagData)
       })
@@ -127,7 +130,7 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'X-Company-ID': company?.id
+          'X-Company-ID': companyId
         },
         body: JSON.stringify({
           is_enabled: !currentState.is_enabled
