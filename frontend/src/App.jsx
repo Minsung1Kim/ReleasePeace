@@ -4,9 +4,8 @@ import LandingPage from './components/LandingPage'
 import LoginForm from './components/LogInForm'
 import Dashboard from './components/Dashboard'
 import CompanySelector from './components/CompanySelector'
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 import { auth } from './firebase'
-import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth'
 
 function App() {
   const [currentView, setCurrentView] = useState('landing') // 'landing', 'login', 'company-select', 'dashboard'
@@ -29,7 +28,7 @@ function App() {
         setSelectedCompany(JSON.parse(savedCompany))
         setCurrentView('dashboard')
       } else {
-        // User logged in but no company selected
+        // User logged in but no company selected → look up companies
         fetchUserCompanies(savedToken)
       }
     }
@@ -37,14 +36,12 @@ function App() {
 
   const fetchUserCompanies = async (authToken) => {
     try {
-      const response = await fetch(`${config.apiUrl}/api/users`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
+      const response = await fetch(`${config.apiUrl}/api/companies/mine`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
       })
       const data = await response.json()
       
-      if (data.success) {
+      if (data.success && Array.isArray(data.companies)) {
         setCompanies(data.companies)
         if (data.companies.length === 1) {
           // Auto-select if only one company
@@ -52,132 +49,81 @@ function App() {
         } else {
           setCurrentView('company-select')
         }
+      } else {
+        throw new Error(data?.message || 'Could not load companies')
       }
     } catch (error) {
       console.error('Failed to fetch companies:', error)
-      handleLogout()
+      setCompanies([])
+      setCurrentView('company-select')
     }
   }
 
   const handleLogin = async (credentials, mode = 'login') => {
-  const { email, password } = credentials
-
-  try {
-    let userCredential
-    if (mode === 'signup') {
-      userCredential = await createUserWithEmailAndPassword(auth, email, password)
-    } else {
-      userCredential = await signInWithEmailAndPassword(auth, email, password)
-    }
-
-    const user = userCredential.user
-    const idToken = await user.getIdToken()
-
-    setUser({ email: user.email, uid: user.uid })
-    setToken(idToken)
-
-    localStorage.setItem('releasepeace_token', idToken)
-    localStorage.setItem('releasepeace_user', JSON.stringify({ email: user.email, uid: user.uid }))
-
-    // 🔍 Fetch user's companies
-    const response = await fetch(`${config.apiUrl}/api/users`, {
-      headers: {
-        Authorization: `Bearer ${idToken}`
-      }
-    })
-
-    const data = await response.json()
-
-    if (data.success && data.companies) {
-      setCompanies(data.companies)
-
-      if (data.companies.length === 1) {
-        // ✅ Auto-select company
-        handleCompanySelect(data.companies[0], idToken)
-      } else if (data.companies.length > 1) {
-        // 👉 Let user choose
-        setCurrentView('company-select')
+    try {
+      let userCred
+      if (mode === 'signup') {
+        userCred = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password)
       } else {
-        // ❌ No companies yet
-        setCurrentView('company-select')
+        userCred = await signInWithEmailAndPassword(auth, credentials.email, credentials.password)
       }
-    } else {
-      throw new Error('Could not fetch companies')
+      const idToken = await userCred.user.getIdToken()
+
+      // Persist session
+      setUser({ email: userCred.user.email, uid: userCred.user.uid })
+      setToken(idToken)
+      localStorage.setItem('releasepeace_token', idToken)
+      localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.user.email, uid: userCred.user.uid }))
+
+      // Fetch companies and route accordingly
+      await fetchUserCompanies(idToken)
+    } catch (error) {
+      console.error('❌ Login error:', error)
+      throw error
     }
-  } catch (error) {
-    console.error('❌ Login error:', error)
-    throw error
   }
-}
 
-const handleGoogleLogin = async () => {
-  try {
-    const provider = new GoogleAuthProvider()
-    const result = await signInWithPopup(auth, provider)
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider()
+      const result = await signInWithPopup(auth, provider)
 
-    const userCred = result.user
-    const idToken = await userCred.getIdToken()
+      const userCred = result.user
+      const idToken = await userCred.getIdToken()
 
-    console.log('✅ Google user:', userCred)
+      // Persist
+      localStorage.setItem('releasepeace_token', idToken)
+      localStorage.setItem('releasepeace_user', JSON.stringify({ email: userCred.email, uid: userCred.uid }))
+      setUser({ email: userCred.email, uid: userCred.uid })
+      setToken(idToken)
 
-    // Persist auth state
-    localStorage.setItem('releasepeace_token', idToken)
-    localStorage.setItem(
-      'releasepeace_user',
-      JSON.stringify({ email: userCred.email, uid: userCred.uid })
-    )
-
-    // Update local state
-    setUser({ email: userCred.email, uid: userCred.uid })
-    setToken(idToken)
-
-    // Now fetch this user’s companies and navigate accordingly
-    await fetchUserCompanies(idToken)
-  } catch (err) {
-    console.error('❌ Google sign-in failed:', err)
-    alert('Google login failed')
+      // Load companies & navigate
+      await fetchUserCompanies(idToken)
+    } catch (err) {
+      console.error('❌ Google sign-in failed:', err)
+      alert('Google login failed')
+    }
   }
-}
 
-
+  // 🔑 Select company (no server round-trip required for mock API)
   const handleCompanySelect = async (company, authToken = token) => {
     try {
-      const response = await fetch(`${config.apiUrl}/api/users/switch-company`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify({ company_id: company.id })
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        setSelectedCompany(data.company)
-        setToken(data.token)
-
-        localStorage.setItem('releasepeace_token', data.token)
-        localStorage.setItem('releasepeace_company', JSON.stringify(data.company))
-
-        setCurrentView('dashboard')
-      } else {
-        throw new Error(data.message || 'Company selection failed')
-      }
+      setSelectedCompany(company)
+      localStorage.setItem('releasepeace_company', JSON.stringify(company))
+      setCurrentView('dashboard')
     } catch (error) {
       console.error('Company selection error:', error)
       throw error
     }
   }
 
-
   const handleLogout = () => {
     setUser(null)
     setToken(null)
-    setSelectedCompany(null)
     setCompanies([])
-    setCurrentView('landing')
-    
+    setSelectedCompany(null)
+    setCurrentView('login')
+
     // Clear localStorage
     localStorage.removeItem('releasepeace_token')
     localStorage.removeItem('releasepeace_user')
@@ -193,27 +139,26 @@ const handleGoogleLogin = async () => {
   // Render based on current view
   switch (currentView) {
     case 'login':
-    return (
-      <LoginForm
-        onLogin={handleLogin}
-        onGoogleLogin={handleGoogleLogin}  // ✅ Add this
-        onBack={() => setCurrentView('landing')}
-      />
-    )
+      return (
+        <LoginForm
+          onLogin={handleLogin}
+          onGoogleLogin={handleGoogleLogin}
+          onBack={() => setCurrentView('landing')}
+        />
+      )
 
     case 'company-select':
-     return (
-       <CompanySelector
-         user={user}
-         companies={companies}
-         token={token}
-        onCompanySelect={handleCompanySelect}
-         onLogout={handleLogout}
-        onCompaniesUpdate={setCompanies}
-       />
-     )
+      return (
+        <CompanySelector
+          user={user}
+          companies={companies}
+          token={token}
+          onCompanySelect={handleCompanySelect}
+          onLogout={handleLogout}
+          onCompaniesUpdate={setCompanies}
+        />
+      )
 
-    
     case 'dashboard':
       return (
         <Dashboard
