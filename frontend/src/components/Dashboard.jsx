@@ -10,32 +10,12 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
   const [selectedFlag, setSelectedFlag] = useState(null)
   const [activeEnvironment, setActiveEnvironment] = useState('production')
   const [showCreateFlag, setShowCreateFlag] = useState(false)
+  const [showRoleModal, setShowRoleModal] = useState(false)
   const userRole = company?.role || 'member'
   const canCreate = ['owner','pm'].includes(userRole)
   const canToggle = ['owner','pm','engineer'].includes(userRole)
 
-  // Handler for role change in Manage Roles dropdown
-  const handleRoleChange = async (userId, newRole) => {
-    try {
-      const res = await fetch(`${config.apiUrl}/api/companies/${company.id}/users/${userId}/role`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ new_role: newRole })
-      });
-
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'Failed to update role');
-
-      // Refetch company to update UI
-      onSwitchCompany();
-    } catch (err) {
-      alert(err.message);
-    }
-  }
-
+ 
 
   useEffect(() => {
     // Test API connection
@@ -70,6 +50,28 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
       console.error('Failed to load flags:', err)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  // Modal role change handler (soft update)
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      const res = await fetch(`${config.apiUrl}/api/companies/${company.id}/users/${userId}/role`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ new_role: newRole })
+      })
+
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to update role')
+
+      // Soft update for now — could refetch company later
+      company.members = company.members.map(m => m.id === userId ? { ...m, role: newRole } : m)
+    } catch (err) {
+      alert(err.message)
     }
   }
 
@@ -386,6 +388,14 @@ const Dashboard = ({ user, company, token, onLogout, onSwitchCompany }) => {
         {/* Company Info */}
         <div className="mt-8 rp-card p-6">
           <h3 className="font-semibold rp-heading mb-2">🎉 Multi-Tenant Setup Complete!</h3>
+          {company?.role === 'owner' && (
+            <button
+              onClick={() => setShowRoleModal(true)}
+              className="mt-4 px-4 py-2 border text-sm font-medium rounded-md rp-btn-secondary"
+            >
+              Manage Roles
+            </button>
+          )}
           <p className="text-sm text-[var(--rp-muted)] mb-2">
             You're viewing flags for <strong>{company?.name}</strong>. Each company has completely isolated data.
           </p>
@@ -573,6 +583,50 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// Modal for managing member roles
+const ManageRolesModal = ({ members, onClose, onChangeRole }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full">
+        <h2 className="text-lg font-semibold mb-4">Manage Member Roles</h2>
+
+        {members.length === 0 ? (
+          <p className="text-sm text-gray-600">No members found.</p>
+        ) : (
+          <div className="space-y-4">
+            {members.map(member => (
+              <div key={member.id} className="flex justify-between items-center">
+                <div>
+                  <div className="text-sm font-medium">{member.display_name || member.username}</div>
+                  <div className="text-xs text-gray-500">{member.email}</div>
+                </div>
+                <select
+                  value={member.role}
+                  onChange={e => onChangeRole(member.id, e.target.value)}
+                  className="text-sm border px-2 py-1 rounded bg-white"
+                >
+                  {['owner', 'pm', 'engineer', 'viewer'].map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 text-sm rounded hover:bg-gray-300"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )
