@@ -199,15 +199,13 @@ const handleGoogleLogin = async () => {
 
     case 'company-select':
       return (
-        <CompanySelector
-          user={user}
-          companies={companies}
+        <JoinOrCreateCompany
           token={token}
           onCompanySelect={handleCompanySelect}
           onLogout={handleLogout}
-          onCompaniesUpdate={setCompanies}
         />
       )
+
     
     case 'dashboard':
       return (
