@@ -23,10 +23,13 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   const [rolesOpen, setRolesOpen] = useState(false);
   const [members, setMembers] = useState([]);
 
-  // Function to open Manage Roles modal and fetch members
-  async function openRoles() {
+  async function refreshMembers() {
     const list = await api.getCompanyMembers(company.id);
     setMembers(list);
+  }
+
+  async function openRoles() {
+    await refreshMembers();
     setRolesOpen(true);
   }
 
@@ -429,10 +432,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
         <div className="mt-8 rp-card p-6">
           <h3 className="font-semibold rp-heading mb-2">🎉 Multi-Tenant Setup Complete!</h3>
           {company?.role === 'owner' && (
-            <button
-              onClick={openRoles}
-              className="px-3 py-2 bg-[var(--rp-accent)] rounded-md"
-            >
+            <button onClick={openRoles} className="px-3 py-2 bg-[var(--rp-accent)] rounded-md">
               Manage Roles
             </button>
           )}
@@ -449,16 +449,28 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
         </div>
 
       </div>
-      <ManageRolesModal
-        open={rolesOpen}
-        onClose={() => setRolesOpen(false)}
-        company={company}
-        members={members}
-        refresh={async () => {
-          const list = await api.getCompanyMembers(company.id);
-          setMembers(list);
-        }}
-      />
+      {rolesOpen && (
+        <ManageRolesModal
+          members={members}
+          currentUserId={user?.id}
+          onClose={() => setRolesOpen(false)}
+          onChangeRole={async (userId, role) => {
+            await api.updateMemberRole(company.id, userId, role);
+            const list = await api.getCompanyMembers(company.id);
+            setMembers(list);
+          }}
+          onTransferOwnership={async (userId) => {
+            await api.transferOwnership(company.id, userId);
+            const list = await api.getCompanyMembers(company.id);
+            setMembers(list);
+          }}
+          onRemoveMember={async (userId) => {
+            await api.removeMember(company.id, userId);
+            const list = await api.getCompanyMembers(company.id);
+            setMembers(list);
+          }}
+        />
+      )}
     </div>
   )
 }
