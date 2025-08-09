@@ -71,22 +71,12 @@ function MemberRow({
   onRemoveMember,
   currentUserId,
 }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef(null);
+  const btnRef = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 224 }); // px
 
   const isOwner = member.role === "owner";
   const isSelf = currentUserId && member.id === currentUserId;
-
-  // Close menu on outside click
-  useEffect(() => {
-    function onDocClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setOpen(false);
-      }
-    }
-    if (open) document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
 
   const doChangeRole = async (role) => {
     setOpen(false);
@@ -133,28 +123,44 @@ function MemberRow({
         </span>
 
         {/* 3-dot menu */}
-        <div className="relative" ref={menuRef}>
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100"
-            aria-haspopup="menu"
-            aria-expanded={open}
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={() => {
+            const r = btnRef.current.getBoundingClientRect();
+            setMenuPos({
+              top: r.bottom + 6,
+              left: r.right - 224,
+              width: 224,
+            });
+            setMenuOpen((v) => !v);
+          }}
+          className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <svg
+            className="w-5 h-5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
           >
-            <svg
-              className="w-5 h-5"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              aria-hidden="true"
-            >
-              <path d="M10 6.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-            </svg>
-          </button>
+            <path d="M10 6.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+          </svg>
+        </button>
 
-          {open && (
+        {menuOpen && (
+          <>
+            {/* click-away layer */}
+            <div
+              className="fixed inset-0 z-[999]"
+              onMouseDown={() => setMenuOpen(false)}
+            />
+            {/* the menu */}
             <div
               role="menu"
-              className="absolute right-0 mt-2 w-56 rounded-xl border bg-white shadow-lg p-1"
+              className="fixed z-[1000] rounded-xl border bg-white shadow-xl p-1"
+              style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
             >
               <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-500">
                 Change role
@@ -166,7 +172,8 @@ function MemberRow({
                   disabled={member.role === "owner" && r !== "owner"}
                   selected={member.role === r}
                 >
-                  {member.role === r ? "✓ " : ""}{r}
+                  {member.role === r ? "✓ " : ""}
+                  {r}
                 </MenuItem>
               ))}
               <div className="my-1 border-t" />
@@ -183,8 +190,8 @@ function MemberRow({
                 Remove from company
               </MenuItem>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </li>
   );
