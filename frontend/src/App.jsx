@@ -51,6 +51,40 @@ function App() {
     }
   }, [])
 
+  // Handle invite code in URL after authentication
+  useEffect(() => {
+    if (!token) return;
+    const params = new URLSearchParams(window.location.search);
+    const code = (params.get('invite') || '').trim();
+    if (!code) return;
+
+    (async () => {
+      try {
+        // POST /api/companies/join { invite_code: code }
+        if (window.companies && window.companies.join) {
+          await window.companies.join(code);
+        } else {
+          // fallback: direct fetch
+          await fetch(`${config.apiUrl}/api/companies/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ invite_code: code })
+          });
+        }
+        params.delete('invite');
+        const url = window.location.pathname + (params.toString() ? `?${params}` : '');
+        window.history.replaceState({}, '', url);
+        if (typeof fetchUserCompanies === 'function') {
+          await fetchUserCompanies(token);
+        } else {
+          window.location.reload();
+        }
+      } catch (e) {
+        alert(e?.data?.message || e.message);
+      }
+    })();
+  }, [token]);
+
   // always return a fresh token (and persist)
   const getFreshToken = async () => {
     if (auth.currentUser) {

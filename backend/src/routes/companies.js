@@ -7,6 +7,7 @@ const router = express.Router();
 const { authMiddleware } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 const { User, UserCompany, Company } = require('../models');
+const { Op, fn, col, where } = require('sequelize');
 
 // Allowed per your DB enum
 const ALLOWED_ROLES = ['owner', 'admin', 'member'];
@@ -116,33 +117,44 @@ router.post('/', authMiddleware, async (req, res, next) => {
 });
 
 // Join by invite code
-// Join by invite code
+// Join by invite code (case-insensitive, trims spaces)
 router.post('/join', authMiddleware, async (req, res, next) => {
-  const t = await Company.sequelize.transaction();
   try {
-    const raw = (req.body?.invite_code ?? '');
-    const invite_code = String(raw).trim();              // 👈 trim just in case
-    if (!invite_code) return res.status(400).json({ success: false, message: 'invite_code is required' });
+    const invite_code_raw = (req.body?.invite_code ?? '').toString().trim();
+    if (!invite_code_raw) {
+      return res.status(400).json({ success: false, message: 'invite_code is required' });
+    }
 
-    // quick visibility in logs
-    console.log('Join attempt with invite_code:', invite_code);
+    // Log to confirm what the server actually receives
+    console.log('Join attempt invite_code="%s"', invite_code_raw);
 
-    const company = await Company.findOne({ where: { invite_code, is_active: true }, transaction: t });
-    if (!company) return res.status(404).json({ success: false, message: 'Invalid invite code' });
+    // Case-insensitive lookup: lower(invite_code) = lower(:code)
+    const code = invite_code_raw.toLowerCase();
+    const company = await Company.findOne({
+      where: where(fn('lower', col('invite_code')), code)
+    });
+
+    if (!company) {
+      return res.status(404).json({ success: false, message: 'Invalid invite code' });
+    }
 
     const [uc] = await UserCompany.findOrCreate({
       where: { user_id: req.user.id, company_id: company.id },
-      defaults: { role: 'member', status: 'active' },
-      transaction: t,
+      defaults: { role: 'member', status: 'active' }
     });
-    if (uc.status !== 'active') await uc.update({ status: 'active' }, { transaction: t });
+    if (uc.status !== 'active') await uc.update({ status: 'active' });
 
-    await t.commit();
-    res.json({
+    return res.json({
       success: true,
-      company: { id: company.id, name: company.name, subdomain: company.subdomain, plan: company.plan, role: uc.role },
+      company: {
+        id: company.id,
+        name: company.name,
+        subdomain: company.subdomain,
+        plan: company.plan,
+        role: uc.role,
+      }
     });
-  } catch (err) { await t.rollback(); next(err); }
+  } catch (err) { next(err); }
 });
 
 /* ---------------------------
