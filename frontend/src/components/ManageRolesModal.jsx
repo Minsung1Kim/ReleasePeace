@@ -1,162 +1,211 @@
-import { useState } from "react";
-import PropTypes from "prop-types";
-import {
-  Dialog, DialogTitle, DialogContent, IconButton, Menu, MenuItem,
-  List, ListItem, ListItemText, Chip, Stack, Tooltip, Divider, Snackbar, Alert
-} from "@mui/material";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import * as api from "../utils/api";
+import { useEffect, useRef, useState } from "react";
 
-const ROLE_OPTIONS = ["owner","admin","pm","qa","viewer"]; // adjust to your roles
+// Adjust to your roles:
+const ROLE_OPTIONS = ["owner", "admin", "pm", "qa", "viewer"];
 
-function MemberRow({ member, companyId, onChanged }) {
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [toast, setToast] = useState(null);
+export default function ManageRolesModal({
+  members = [],
+  onClose,
+  onChangeRole,
+  onTransferOwnership,  // optional
+  onRemoveMember,       // optional
+  currentUserId,        // optional: to disable transfer to self
+}) {
+  const overlayRef = useRef(null);
 
-  const open = Boolean(anchorEl);
-  const handleMenu = (e) => setAnchorEl(e.currentTarget);
-  const closeMenu = () => setAnchorEl(null);
+  // Close on ESC
+  useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose?.();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
-  async function changeRole(nextRole) {
-    closeMenu();
-    if (member.role === nextRole) return;
-    try {
-      setBusy(true);
-      await api.updateMemberRole(companyId, member.id, nextRole);
-      setToast({ sev: "success", msg: `Role changed to ${nextRole}` });
-      onChanged();
-    } catch (e) {
-      setToast({ sev: "error", msg: e?.message || "Failed to change role" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function transferOwnership() {
-    closeMenu();
-    if (!window.confirm(`Transfer ownership to ${member.email}? This can't be undone here.`)) return;
-    try {
-      setBusy(true);
-      await api.transferOwnership(companyId, member.id);
-      setToast({ sev: "success", msg: "Ownership transferred" });
-      onChanged();
-    } catch (e) {
-      setToast({ sev: "error", msg: e?.message || "Failed to transfer ownership" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeMember() {
-    closeMenu();
-    if (!window.confirm(`Remove ${member.email} from this company?`)) return;
-    try {
-      setBusy(true);
-      await api.removeMember(companyId, member.id);
-      setToast({ sev: "success", msg: "Member removed" });
-      onChanged();
-    } catch (e) {
-      setToast({ sev: "error", msg: e?.message || "Failed to remove member" });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const isSelf = member.id === (window.__AUTH?.userId || "");
-  const isOwner = member.role === "owner";
+  // Close on outside click
+  const handleOverlayClick = (e) => {
+    if (e.target === overlayRef.current) onClose?.();
+  };
 
   return (
-    <>
-      <ListItem
-        secondaryAction={
-          <>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Chip label={member.role} size="small" />
-              <Tooltip title="More actions">
-                <span>
-                  <IconButton onClick={handleMenu} disabled={busy} size="small">
-                    <MoreVertIcon />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Stack>
-            <Menu anchorEl={anchorEl} open={open} onClose={closeMenu}>
-              <MenuItem disabled>Change role</MenuItem>
-              <Divider />
+    <div
+      ref={overlayRef}
+      onClick={handleOverlayClick}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    >
+      <div className="bg-white w-full max-w-xl rounded-2xl shadow-xl">
+        <div className="p-4 border-b">
+          <h2 className="text-lg font-semibold">Manage Roles</h2>
+        </div>
+
+        <div className="p-2 max-h-[70vh] overflow-y-auto">
+          <ul className="divide-y">
+            {members.map((m) => (
+              <MemberRow
+                key={m.id}
+                member={m}
+                onChangeRole={onChangeRole}
+                onTransferOwnership={onTransferOwnership}
+                onRemoveMember={onRemoveMember}
+                currentUserId={currentUserId}
+              />
+            ))}
+          </ul>
+        </div>
+
+        <div className="p-3 flex justify-end gap-2 border-t">
+          <button
+            className="px-4 py-2 rounded-lg border hover:bg-gray-50"
+            onClick={() => onClose?.()}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MemberRow({
+  member,
+  onChangeRole,
+  onTransferOwnership,
+  onRemoveMember,
+  currentUserId,
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  const isOwner = member.role === "owner";
+  const isSelf = currentUserId && member.id === currentUserId;
+
+  // Close menu on outside click
+  useEffect(() => {
+    function onDocClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    if (open) document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const doChangeRole = async (role) => {
+    setOpen(false);
+    if (!onChangeRole) return;
+    if (role === member.role) return;
+    // Prevent demoting owner via quick menu (optional rule)
+    if (member.role === "owner" && role !== "owner") {
+      alert("Owner cannot be changed here.");
+      return;
+    }
+    await onChangeRole(member.id, role);
+  };
+
+  const doTransfer = async () => {
+    setOpen(false);
+    if (!onTransferOwnership) return;
+    if (!confirm(`Transfer ownership to ${member.email}?`)) return;
+    await onTransferOwnership(member.id);
+  };
+
+  const doRemove = async () => {
+    setOpen(false);
+    if (!onRemoveMember) return;
+    if (isOwner) {
+      alert("Cannot remove current owner.");
+      return;
+    }
+    if (!confirm(`Remove ${member.email} from this company?`)) return;
+    await onRemoveMember(member.id);
+  };
+
+  return (
+    <li className="flex items-center justify-between gap-3 px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-sm font-medium truncate">
+          {member.name || member.email}
+        </div>
+        <div className="text-xs text-gray-500 truncate">{member.email}</div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs px-2 py-1 rounded-full bg-gray-100 border">
+          {member.role}
+        </span>
+
+        {/* 3-dot menu */}
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100"
+            aria-haspopup="menu"
+            aria-expanded={open}
+          >
+            <svg
+              className="w-5 h-5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M10 6.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+            </svg>
+          </button>
+
+          {open && (
+            <div
+              role="menu"
+              className="absolute right-0 mt-2 w-56 rounded-xl border bg-white shadow-lg p-1"
+            >
+              <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-500">
+                Change role
+              </div>
               {ROLE_OPTIONS.map((r) => (
                 <MenuItem
                   key={r}
-                  onClick={() => changeRole(r)}
-                  disabled={busy || (member.role === "owner" && r !== "owner")}
+                  onClick={() => doChangeRole(r)}
+                  disabled={member.role === "owner" && r !== "owner"}
+                  selected={member.role === r}
                 >
-                  {r === member.role ? `✓ ${r}` : r}
+                  {member.role === r ? "✓ " : ""}{r}
                 </MenuItem>
               ))}
-              <Divider />
+              <div className="my-1 border-t" />
               <MenuItem
-                onClick={transferOwnership}
-                disabled={busy || isSelf || isOwner}
+                onClick={doTransfer}
+                disabled={!onTransferOwnership || isSelf || isOwner}
               >
                 Transfer ownership
               </MenuItem>
               <MenuItem
-                onClick={removeMember}
-                disabled={busy || isOwner}
+                onClick={doRemove}
+                disabled={!onRemoveMember || isOwner}
               >
                 Remove from company
               </MenuItem>
-            </Menu>
-          </>
-        }
-      >
-        <ListItemText
-          primary={member.name || member.email}
-          secondary={member.email}
-        />
-      </ListItem>
-      <Snackbar
-        open={!!toast}
-        autoHideDuration={2500}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity={toast?.sev || "info"}>{toast?.msg}</Alert>
-      </Snackbar>
-    </>
+            </div>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }
 
-MemberRow.propTypes = {
-  member: PropTypes.object.isRequired,
-  companyId: PropTypes.string.isRequired,
-  onChanged: PropTypes.func.isRequired,
-};
-
-export default function ManageRolesModal({ open, onClose, company, members, refresh }) {
+function MenuItem({ children, onClick, disabled, selected }) {
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Manage Roles</DialogTitle>
-      <DialogContent dividers>
-        <List dense>
-          {members.map((m) => (
-            <MemberRow
-              key={m.id}
-              member={m}
-              companyId={company.id}
-              onChanged={refresh}
-            />
-          ))}
-        </List>
-      </DialogContent>
-    </Dialog>
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      className={[
+        "w-full text-left px-3 py-2 rounded-lg text-sm",
+        disabled
+          ? "text-gray-300 cursor-not-allowed"
+          : "hover:bg-gray-100",
+        selected ? "font-semibold" : "",
+      ].join(" ")}
+      disabled={disabled}
+      role="menuitem"
+    >
+      {children}
+    </button>
   );
 }
-
-ManageRolesModal.propTypes = {
-  open: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  company: PropTypes.object.isRequired,
-  members: PropTypes.array.isRequired,
-  refresh: PropTypes.func.isRequired,
-};
