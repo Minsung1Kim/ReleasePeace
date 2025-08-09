@@ -85,6 +85,63 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   const [rolesOpen, setRolesOpen] = useState(false);
   const [members, setMembers] = useState([]);
 
+  // Approvals and Audit state
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRows, setAuditRows] = useState([]);
+  const [auditForFlag, setAuditForFlag] = useState(null);
+  // Approvals helpers
+  async function loadPendingApprovals() {
+    try {
+      const res = await authedFetch(`/api/flags/approvals/pending?limit=100`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load approvals');
+      setPendingApprovals(data.pending || []);
+    } catch (e) {
+      alert(e.message || 'Failed to load approvals');
+    }
+  }
+
+  async function decideApproval(flagId, approvalId, status) {
+    const comments = window.prompt(`${status.toUpperCase()} — add a note (optional):`) || '';
+    const res = await authedFetch(`/api/flags/${flagId}/approvals/${approvalId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, comments })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert(data.message || 'Failed to update approval');
+      return;
+    }
+    await loadPendingApprovals();
+    alert(`Approval ${status}.`);
+  }
+
+  function openApprovals() {
+    loadPendingApprovals();
+    setApprovalsOpen(true);
+  }
+
+  async function openAudit(flag) {
+    setAuditForFlag(flag);
+    setAuditOpen(true);
+    setAuditLoading(true);
+    try {
+      const res = await authedFetch(`/api/flags/${flag.id}/audit?limit=200`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load audit');
+      setAuditRows(data.logs || []);
+    } catch (e) {
+      alert(e.message || 'Failed to load audit');
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
   async function refreshMembers() {
     const list = await api.getCompanyMembers(company.id);
     setMembers(list);
@@ -230,7 +287,6 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     try {
       const enabling = !currentState.is_enabled;
 
-      // ask for justification when enabling (esp. high/critical/prod)
       let reason = '';
       if (enabling) {
         const needsReason =
@@ -249,18 +305,34 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
         }
       }
 
-      const response = await authedFetch(`/api/flags/${flagId}/state/${environment}`, {
+      const res = await authedFetch(`/api/flags/${flagId}/state/${environment}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_enabled: enabling, reason })
       });
+      const data = await res.json();
 
-      const data = await response.json();
-      if (response.ok && data.success) {
-        await fetchFlags();
-      } else {
+      if (res.status === 403 && (data?.error || '').toLowerCase().includes('approval')) {
+        // Offer to request approval
+        if (window.confirm('Approval required. Request QA approval now?')) {
+          const comments = window.prompt('Context for approver (optional):') || '';
+          const reqRes = await authedFetch(`/api/flags/${flagId}/approvals`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approver_role: 'qa', comments })
+          });
+          const reqData = await reqRes.json();
+          if (!reqRes.ok || !reqData.success) throw new Error(reqData.message || 'Failed to request approval');
+          alert('Approval requested. QA/Legal/Admin can approve from Approvals panel.');
+        }
+        return;
+      }
+
+      if (!res.ok || !data.success) {
         throw new Error(data.message || data.error || 'Failed to update flag state');
       }
+
+      await fetchFlags();
     } catch (err) {
       console.error('Failed to toggle flag:', err);
       alert(err.message || 'Failed to toggle flag');
@@ -333,6 +405,15 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                     Manage Roles
                   </button>
                 </>
+              )}
+              {/* Approvals button for eligible roles */}
+              {['qa','legal','owner','admin'].includes(user.role) && (
+                <button
+                  onClick={openApprovals}
+                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                >
+                  Approvals
+                </button>
               )}
 
               <button
@@ -468,7 +549,6 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                           )}
                         </div>
                         <p className="text-sm text-gray-600 mb-3">{flag.description}</p>
-                        
                         {flag.tags && flag.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-3">
                             {flag.tags.map((tag, index) => (
@@ -478,13 +558,11 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                             ))}
                           </div>
                         )}
-
                         <div className="text-xs text-gray-500">
                           Created by {flag.creator?.display_name || flag.creator?.username || 'Unknown'} • 
                           {envStats.enabled}/{envStats.total} environments enabled
                         </div>
                       </div>
-                      
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">
                           {activeEnvironment.charAt(0).toUpperCase() + activeEnvironment.slice(1)} Environment
@@ -499,41 +577,53 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                                 {currentEnvState.is_enabled ? `${currentEnvState.rollout_percentage}% enabled` : 'Disabled'}
                               </span>
                             </div>
-                            <button
-                              onClick={() => canToggle
-                                ? toggleFlagState(flag.id, activeEnvironment, currentEnvState, flag)
-                                : alert('You do not have permission to toggle flags.')
-                              }
-                              className="px-3 py-1 rounded text-xs font-medium rp-btn-primary disabled:opacity-50"
-                              disabled={!canToggle}
-                            >
-                              {currentEnvState.is_enabled ? 'Disable' : 'Enable'}
-                            </button>
-                            {['owner','pm'].includes(userRole) && (
+                            <div className="flex items-center gap-2">
+                              {/* Toggle button */}
                               <button
-                                onClick={async () => {
-                                  const why = window.prompt('Emergency reason for rollback (disables in all environments):') || '';
-                                  if (!window.confirm('Disable this flag in ALL environments?')) return;
-                                  try {
-                                    const res = await authedFetch(`/api/flags/${flag.id}/rollback`, {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ reason: why })
-                                    });
-                                    const data = await res.json();
-                                    if (!res.ok || !data.success) throw new Error(data.message || 'Rollback failed');
-                                    await fetchFlags();
-                                    alert('Rollback completed.');
-                                  } catch (e) {
-                                    alert(e.message || 'Rollback failed');
-                                  }
-                                }}
-                                className="px-3 py-1 rounded text-xs font-medium border border-red-300 hover:bg-red-50 ml-2"
-                                title="Disable in all environments"
+                                onClick={() => canToggle
+                                  ? toggleFlagState(flag.id, activeEnvironment, currentEnvState, flag)
+                                  : alert('You do not have permission to toggle flags.')
+                                }
+                                className="px-3 py-1 rounded text-xs font-medium rp-btn-primary disabled:opacity-50"
+                                disabled={!canToggle}
                               >
-                                Rollback
+                                {currentEnvState.is_enabled ? 'Disable' : 'Enable'}
                               </button>
-                            )}
+                              {/* Rollback button for owner/pm */}
+                              {['owner','pm'].includes(userRole) && (
+                                <button
+                                  onClick={async () => {
+                                    const why = window.prompt('Emergency reason for rollback (disables in all environments):') || '';
+                                    if (!window.confirm('Disable this flag in ALL environments?')) return;
+                                    try {
+                                      const res = await authedFetch(`/api/flags/${flag.id}/rollback`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ reason: why })
+                                      });
+                                      const data = await res.json();
+                                      if (!res.ok || !data.success) throw new Error(data.message || 'Rollback failed');
+                                      await fetchFlags();
+                                      alert('Rollback completed.');
+                                    } catch (e) {
+                                      alert(e.message || 'Rollback failed');
+                                    }
+                                  }}
+                                  className="px-3 py-1 rounded text-xs font-medium border border-red-300 hover:bg-red-50 ml-2"
+                                  title="Disable in all environments"
+                                >
+                                  Rollback
+                                </button>
+                              )}
+                              {/* History button */}
+                              <button
+                                onClick={() => openAudit(flag)}
+                                className="px-3 py-1 rounded text-xs font-medium border ml-2 hover:bg-gray-100"
+                                title="View audit history"
+                              >
+                                History
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <div className="text-xs text-gray-500">No state</div>
@@ -583,6 +673,77 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
             setMembers(list);
           }}
         />
+      )}
+
+      {/* Approvals Panel */}
+      {approvalsOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setApprovalsOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Pending Approvals</h3>
+              <div className="flex gap-2">
+                <button className="px-3 py-1 border rounded" onClick={loadPendingApprovals}>Refresh</button>
+                <button className="px-3 py-1 border rounded" onClick={() => setApprovalsOpen(false)}>Close</button>
+              </div>
+            </div>
+            {pendingApprovals.length === 0 ? (
+              <div className="text-sm text-gray-500 p-4">No pending approvals.</div>
+            ) : (
+              <ul className="divide-y">
+                {pendingApprovals.map(p => (
+                  <li key={p.id} className="py-3 px-1 flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {p.flag?.name} <span className="text-xs ml-2 opacity-70">({p.approver_role})</span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Requested by {p.requester?.display_name || p.requester?.username || p.requester?.email} • {new Date(p.created_at).toLocaleString()}
+                      </div>
+                      {p.comments && <div className="text-xs mt-1 opacity-90">“{p.comments}”</div>}
+                      {p.flag?.requires_approval && <span className="rp-badge mt-1 inline-block text-[10px]">requires approval</span>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button className="px-3 py-1 border rounded hover:bg-gray-100" onClick={() => decideApproval(p.flag.id, p.id, 'approved')}>Approve</button>
+                      <button className="px-3 py-1 border rounded hover:bg-gray-100" onClick={() => decideApproval(p.flag.id, p.id, 'rejected')}>Reject</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Audit Log Drawer */}
+      {auditOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setAuditOpen(false)}>
+          <div className="absolute right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl p-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">History — {auditForFlag?.name}</h3>
+              <button className="px-3 py-1 border rounded" onClick={() => setAuditOpen(false)}>Close</button>
+            </div>
+            {auditLoading ? (
+              <div className="p-6 text-sm text-gray-500">Loading…</div>
+            ) : auditRows.length === 0 ? (
+              <div className="p-6 text-sm text-gray-500">No audit entries.</div>
+            ) : (
+              <ul className="divide-y">
+                {auditRows.map(r => (
+                  <li key={r.id} className="py-3">
+                    <div className="text-sm">
+                      <span className="font-medium">{r.action}</span>
+                      {r.environment ? <span className="ml-2 text-xs opacity-70">[{r.environment}]</span> : null}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {new Date(r.created_at).toLocaleString()} • {r.user?.display_name || r.user?.username || r.user?.email}
+                    </div>
+                    {r.reason && <div className="text-xs mt-1">Reason: {r.reason}</div>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

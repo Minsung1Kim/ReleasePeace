@@ -1,7 +1,7 @@
 // backend/src/routes/flags.js
 const express = require('express');
 
-const { authMiddleware, requireRole: requireGlobalRole } = require('../middleware/auth'); // global role (pm/qa/etc)
+const { authMiddleware, requireRole: requireGlobalRole } = require('../middleware/auth');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
 
 const { FeatureFlag, FlagState, FlagApproval, AuditLog, User } = require('../models');
@@ -31,56 +31,44 @@ async function writeAudit({ flagId, userId, action, oldState = null, newState = 
 
 /* ------------ list flags ------------ */
 
-router.get(
-  '/',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
-  async (req, res) => {
-    try {
-      const flags = await FeatureFlag.findAll({
-        where: { company_id: req.companyId },
-        include: [
-          { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
-          { model: FlagState, as: 'states' }
-        ],
-        order: [['created_at', 'DESC']]
-      });
+router.get('/', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
+  try {
+    const flags = await FeatureFlag.findAll({
+      where: { company_id: req.companyId },
+      include: [
+        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
+        { model: FlagState, as: 'states' }
+      ],
+      order: [['created_at', 'DESC']]
+    });
 
-      res.json({ success: true, flags, total: flags.length, company_id: req.companyId });
-    } catch (error) {
-      console.error('Error fetching flags:', error);
-      res.status(500).json({ error: 'Failed to fetch flags', message: error.message });
-    }
+    res.json({ success: true, flags, total: flags.length, company_id: req.companyId });
+  } catch (error) {
+    console.error('Error fetching flags:', error);
+    res.status(500).json({ error: 'Failed to fetch flags', message: error.message });
   }
-);
+});
 
 /* ------------ get one ------------ */
 
-router.get(
-  '/:id',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
-  async (req, res) => {
-    try {
-      const flag = await FeatureFlag.findOne({
-        where: { id: req.params.id, company_id: req.companyId },
-        include: [
-          { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
-          { model: FlagState, as: 'states' }
-        ]
-      });
+router.get('/:id', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
+  try {
+    const flag = await FeatureFlag.findOne({
+      where: { id: req.params.id, company_id: req.companyId },
+      include: [
+        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
+        { model: FlagState, as: 'states' }
+      ]
+    });
 
-      if (!flag) return res.status(404).json({ error: 'Flag not found' });
+    if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-      res.json({ success: true, flag });
-    } catch (error) {
-      console.error('Error fetching flag:', error);
-      res.status(500).json({ error: 'Failed to fetch flag', message: error.message });
-    }
+    res.json({ success: true, flag });
+  } catch (error) {
+    console.error('Error fetching flag:', error);
+    res.status(500).json({ error: 'Failed to fetch flag', message: error.message });
   }
-);
+});
 
 /* ------------ create ------------ */
 
@@ -88,11 +76,13 @@ router.post(
   '/',
   authMiddleware,
   extractCompanyContext,
-  // PMs/Owners can create
   requireGlobalRole(['owner', 'pm']),
   async (req, res) => {
     try {
-      const { name, description, flag_type, risk_level, tags, metadata, requires_approval, auto_disable_on_error, error_threshold } = req.body;
+      const {
+        name, description, flag_type, risk_level, tags, metadata,
+        requires_approval, auto_disable_on_error, error_threshold
+      } = req.body;
 
       if (!name) return res.status(400).json({ error: 'Flag name is required' });
 
@@ -152,96 +142,84 @@ router.post(
 
 /* ------------ update meta ------------ */
 
-router.put(
-  '/:id',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
-  async (req, res) => {
-    try {
-      const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
-      if (!flag) return res.status(404).json({ error: 'Flag not found' });
+router.put('/:id', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
+  try {
+    const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
+    if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-      const { name } = req.body;
-      if (name && name !== flag.name) {
-        const dup = await FeatureFlag.findOne({
-          where: { name, company_id: req.companyId, id: { [Op.ne]: flag.id } }
-        });
-        if (dup) return res.status(400).json({ error: 'Flag name already exists in this company' });
-      }
-
-      const before = flag.toJSON();
-      await flag.update({
-        name: req.body.name ?? flag.name,
-        description: req.body.description ?? flag.description,
-        flag_type: req.body.flag_type ?? flag.flag_type,
-        risk_level: req.body.risk_level ?? flag.risk_level,
-        tags: req.body.tags ?? flag.tags,
-        metadata: req.body.metadata ?? flag.metadata,
-        requires_approval: req.body.requires_approval ?? flag.requires_approval,
-        auto_disable_on_error: req.body.auto_disable_on_error ?? flag.auto_disable_on_error,
-        error_threshold: req.body.error_threshold ?? flag.error_threshold
+    const { name } = req.body;
+    if (name && name !== flag.name) {
+      const dup = await FeatureFlag.findOne({
+        where: { name, company_id: req.companyId, id: { [Op.ne]: flag.id } }
       });
-
-      const after = await FeatureFlag.findByPk(flag.id, {
-        include: [
-          { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
-          { model: FlagState, as: 'states' }
-        ]
-      });
-
-      await writeAudit({
-        flagId: flag.id,
-        userId: req.user.id,
-        action: 'flag:update',
-        oldState: before,
-        newState: after.toJSON(),
-        reason: req.body.reason || '',
-        environment: null,
-        req
-      });
-
-      res.json({ success: true, flag: after });
-    } catch (error) {
-      console.error('Error updating flag:', error);
-      res.status(500).json({ error: 'Failed to update flag', message: error.message });
+      if (dup) return res.status(400).json({ error: 'Flag name already exists in this company' });
     }
+
+    const before = flag.toJSON();
+    await flag.update({
+      name: req.body.name ?? flag.name,
+      description: req.body.description ?? flag.description,
+      flag_type: req.body.flag_type ?? flag.flag_type,
+      risk_level: req.body.risk_level ?? flag.risk_level,
+      tags: req.body.tags ?? flag.tags,
+      metadata: req.body.metadata ?? flag.metadata,
+      requires_approval: req.body.requires_approval ?? flag.requires_approval,
+      auto_disable_on_error: req.body.auto_disable_on_error ?? flag.auto_disable_on_error,
+      error_threshold: req.body.error_threshold ?? flag.error_threshold
+    });
+
+    const after = await FeatureFlag.findByPk(flag.id, {
+      include: [
+        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
+        { model: FlagState, as: 'states' }
+      ]
+    });
+
+    await writeAudit({
+      flagId: flag.id,
+      userId: req.user.id,
+      action: 'flag:update',
+      oldState: before,
+      newState: after.toJSON(),
+      reason: req.body.reason || '',
+      environment: null,
+      req
+    });
+
+    res.json({ success: true, flag: after });
+  } catch (error) {
+    console.error('Error updating flag:', error);
+    res.status(500).json({ error: 'Failed to update flag', message: error.message });
   }
-);
+});
 
 /* ------------ delete (soft) ------------ */
 
-router.delete(
-  '/:id',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
-  async (req, res) => {
-    try {
-      const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
-      if (!flag) return res.status(404).json({ error: 'Flag not found' });
+router.delete('/:id', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
+  try {
+    const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
+    if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-      const before = flag.toJSON();
-      await flag.update({ is_active: false });
+    const before = flag.toJSON();
+    await flag.update({ is_active: false });
 
-      await writeAudit({
-        flagId: flag.id,
-        userId: req.user.id,
-        action: 'flag:delete',
-        oldState: before,
-        newState: flag.toJSON(),
-        reason: req.body.reason || '',
-        environment: null,
-        req
-      });
+    await writeAudit({
+      flagId: flag.id,
+      userId: req.user.id,
+      action: 'flag:delete',
+      oldState: before,
+      newState: flag.toJSON(),
+      reason: req.body.reason || '',
+      environment: null,
+      req
+    });
 
-      res.json({ success: true, message: 'Flag deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting flag:', error);
-      res.status(500).json({ error: 'Failed to delete flag', message: error.message });
-    }
+    res.json({ success: true, message: 'Flag deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting flag:', error);
+    res.status(500).json({ error: 'Failed to delete flag', message: error.message });
   }
-);
+});
 
 /* ------------ toggle state ------------ */
 
@@ -249,7 +227,6 @@ router.put(
   '/:flagId/state/:environment',
   authMiddleware,
   extractCompanyContext,
-  // Engineers can toggle; PMs/Owners too
   requireGlobalRole(['owner', 'pm', 'engineer']),
   async (req, res) => {
     try {
@@ -274,26 +251,18 @@ router.put(
       const before = state.toJSON();
       const nextEnabled = (typeof is_enabled === 'boolean') ? is_enabled : state.is_enabled;
 
-      // 1) Approval gate for production enables on approval-required flags
+      // Approval gate for prod enables
       if (flag.requires_approval && environment === 'production' && !state.is_enabled && nextEnabled) {
-        // approved within last 24h by QA/Legal/Owner/Admin
         const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
         const approved = await FlagApproval.findOne({
-          where: {
-            flag_id: flag.id,
-            status: 'approved',
-            approved_at: { [Op.gte]: cutoff }
-          }
+          where: { flag_id: flag.id, status: 'approved', approved_at: { [Op.gte]: cutoff } }
         });
         if (!approved) {
-          return res.status(403).json({
-            error: 'Approval required',
-            message: 'This flag requires approval to enable in production.'
-          });
+          return res.status(403).json({ error: 'Approval required', message: 'This flag requires approval to enable in production.' });
         }
       }
 
-      // 2) Reason required for enabling high/critical in production
+      // Reason required for high/critical in prod
       if (environment === 'production' && !state.is_enabled && nextEnabled && (flag.risk_level === 'high' || flag.risk_level === 'critical')) {
         if (!reason || !String(reason).trim()) {
           return res.status(400).json({ error: 'reason_required', message: 'Please provide a change justification for enabling high/critical flags in production.' });
@@ -326,92 +295,100 @@ router.put(
   }
 );
 
-/* ------------ one-click rollback (disable everywhere) ------------ */
+/* ------------ one-click rollback ------------ */
 
-router.post(
-  '/:flagId/rollback',
-  authMiddleware,
-  extractCompanyContext,
-  requireGlobalRole(['owner', 'pm']),
-  async (req, res) => {
-    try {
-      const { flagId } = req.params;
-      const { reason } = req.body || {};
+router.post('/:flagId/rollback', authMiddleware, extractCompanyContext, requireGlobalRole(['owner', 'pm']), async (req, res) => {
+  try {
+    const { flagId } = req.params;
+    const { reason } = req.body || {};
 
-      const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
-      if (!flag) return res.status(404).json({ error: 'Flag not found' });
+    const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
+    if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-      const states = await FlagState.findAll({ where: { flag_id: flagId } });
-      for (const st of states) {
-        const before = st.toJSON();
-        await st.update({ is_enabled: false, updated_by: req.user.id });
-        await writeAudit({
-          flagId: flag.id,
-          userId: req.user.id,
-          action: 'rollback:disable',
-          oldState: before,
-          newState: st.toJSON(),
-          reason: reason || 'Emergency rollback',
-          environment: st.environment,
-          req
-        });
-      }
-
-      res.json({ success: true, disabled: states.length });
-    } catch (error) {
-      console.error('Rollback failed:', error);
-      res.status(500).json({ error: 'Rollback failed', message: error.message });
-    }
-  }
-);
-
-/* ------------ approvals (simple) ------------ */
-
-// Request approval (engineer/pm can request)
-router.post(
-  '/:flagId/approvals',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
-  requireGlobalRole(['engineer', 'pm']),
-  async (req, res) => {
-    try {
-      const { flagId } = req.params;
-      const { approver_role = 'qa', comments = '' } = req.body || {};
-
-      const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
-      if (!flag) return res.status(404).json({ error: 'Flag not found' });
-
-      const approval = await FlagApproval.create({
-        flag_id: flag.id,
-        requested_by: req.user.id,
-        approver_role,
-        status: 'pending',
-        comments
-      });
-
+    const states = await FlagState.findAll({ where: { flag_id: flagId } });
+    for (const st of states) {
+      const before = st.toJSON();
+      await st.update({ is_enabled: false, updated_by: req.user.id });
       await writeAudit({
         flagId: flag.id,
         userId: req.user.id,
-        action: 'approval:request',
-        oldState: null,
-        newState: approval.toJSON(),
-        reason: comments || '',
-        environment: null,
+        action: 'rollback:disable',
+        oldState: before,
+        newState: st.toJSON(),
+        reason: reason || 'Emergency rollback',
+        environment: st.environment,
         req
       });
-
-      res.status(201).json({ success: true, approval });
-    } catch (error) {
-      console.error('Create approval failed:', error);
-      res.status(500).json({ error: 'Create approval failed', message: error.message });
     }
-  }
-);
 
-// Approve or reject (qa/legal/owner/admin)
-router.patch(
-  '/:flagId/approvals/:approvalId',
+    res.json({ success: true, disabled: states.length });
+  } catch (error) {
+    console.error('Rollback failed:', error);
+    res.status(500).json({ error: 'Rollback failed', message: error.message });
+  }
+});
+
+/* ------------ approvals CRUD ------------ */
+
+// request approval (engineer/pm)
+router.post('/:flagId/approvals', authMiddleware, extractCompanyContext, requireCompanyMembership, requireGlobalRole(['engineer', 'pm']), async (req, res) => {
+  try {
+    const { flagId } = req.params;
+    const { approver_role = 'qa', comments = '' } = req.body || {};
+
+    const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
+    if (!flag) return res.status(404).json({ error: 'Flag not found' });
+
+    const approval = await FlagApproval.create({
+      flag_id: flag.id,
+      requested_by: req.user.id,
+      approver_role,
+      status: 'pending',
+      comments
+    });
+
+    await writeAudit({
+      flagId: flag.id,
+      userId: req.user.id,
+      action: 'approval:request',
+      oldState: null,
+      newState: approval.toJSON(),
+      reason: comments || '',
+      environment: null,
+      req
+    });
+
+    res.status(201).json({ success: true, approval });
+  } catch (error) {
+    console.error('Create approval failed:', error);
+    res.status(500).json({ error: 'Create approval failed', message: error.message });
+  }
+});
+
+// list approvals for a flag
+router.get('/:flagId/approvals', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
+  try {
+    const { flagId } = req.params;
+    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+
+    const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
+    if (!flag) return res.status(404).json({ error: 'Flag not found' });
+
+    const approvals = await FlagApproval.findAll({
+      where: { flag_id: flagId },
+      include: [{ model: User, as: 'requester', attributes: ['id', 'display_name', 'username', 'email'] },
+                { model: User, as: 'approver', attributes: ['id', 'display_name', 'username', 'email'] }],
+      order: [['created_at', 'DESC']],
+      limit
+    });
+    res.json({ success: true, approvals });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to list approvals', message: e.message });
+  }
+});
+
+// approve/reject (qa/legal/owner/admin)
+router.patch('/:flagId/approvals/:approvalId',
   authMiddleware,
   extractCompanyContext,
   requireCompanyMembership,
@@ -420,20 +397,12 @@ router.patch(
     try {
       const { flagId, approvalId } = req.params;
       const { status, comments = '' } = req.body || {};
-
-      if (!['approved', 'rejected'].includes(status)) {
-        return res.status(400).json({ error: 'Invalid status' });
-      }
+      if (!['approved', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
       const approval = await FlagApproval.findOne({ where: { id: approvalId, flag_id: flagId } });
       if (!approval) return res.status(404).json({ error: 'Approval not found' });
 
-      await approval.update({
-        status,
-        approved_by: req.user.id,
-        approved_at: new Date(),
-        comments
-      });
+      await approval.update({ status, approved_by: req.user.id, approved_at: new Date(), comments });
 
       await writeAudit({
         flagId,
@@ -450,6 +419,127 @@ router.patch(
     } catch (error) {
       console.error('Update approval failed:', error);
       res.status(500).json({ error: 'Update approval failed', message: error.message });
+    }
+  }
+);
+
+/* ------------ approvals: pending for this company ------------ */
+
+router.get('/approvals/pending',
+  authMiddleware,
+  extractCompanyContext,
+  requireCompanyMembership,
+  requireGlobalRole(['qa', 'legal', 'owner', 'admin']),
+  async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+      const rows = await FlagApproval.findAll({
+        where: { status: 'pending' },
+        include: [
+          {
+            model: FeatureFlag,
+            as: 'flag',
+            where: { company_id: req.companyId },
+            attributes: ['id', 'name', 'risk_level', 'requires_approval']
+          },
+          { model: User, as: 'requester', attributes: ['id', 'display_name', 'username', 'email'] }
+        ],
+        order: [['created_at', 'DESC']],
+        limit
+      });
+
+      res.json({
+        success: true,
+        pending: rows.map(r => ({
+          id: r.id,
+          created_at: r.created_at,
+          approver_role: r.approver_role,
+          comments: r.comments,
+          flag: r.flag,
+          requester: r.requester
+        }))
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to load pending approvals', message: e.message });
+    }
+  }
+);
+
+/* ------------ audit: per flag & recent for company ------------ */
+
+router.get('/:flagId/audit',
+  authMiddleware,
+  extractCompanyContext,
+  requireCompanyMembership,
+  async (req, res) => {
+    try {
+      const { flagId } = req.params;
+      const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+
+      const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
+      if (!flag) return res.status(404).json({ error: 'Flag not found' });
+
+      const logs = await AuditLog.findAll({
+        where: { flag_id: flagId },
+        include: [{ model: User, as: 'user', attributes: ['id', 'display_name', 'username', 'email'] }],
+        order: [['created_at', 'DESC']],
+        limit
+      });
+
+      res.json({
+        success: true,
+        logs: logs.map(l => ({
+          id: l.id,
+          created_at: l.created_at,
+          action: l.action,
+          environment: l.environment,
+          user: l.user,
+          reason: l.reason,
+          old_state: l.old_state,
+          new_state: l.new_state
+        }))
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to load audit', message: e.message });
+    }
+  }
+);
+
+router.get('/audit/recent',
+  authMiddleware,
+  extractCompanyContext,
+  requireCompanyMembership,
+  async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+      const logs = await AuditLog.findAll({
+        include: [
+          {
+            model: FeatureFlag,
+            as: 'flag',
+            where: { company_id: req.companyId },
+            attributes: ['id', 'name']
+          },
+          { model: User, as: 'user', attributes: ['id', 'display_name', 'username', 'email'] }
+        ],
+        order: [['created_at', 'DESC']],
+        limit
+      });
+
+      res.json({
+        success: true,
+        logs: logs.map(l => ({
+          id: l.id,
+          created_at: l.created_at,
+          action: l.action,
+          environment: l.environment,
+          user: l.user,
+          flag: l.flag,
+          reason: l.reason
+        }))
+      });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to load recent audit', message: e.message });
     }
   }
 );
