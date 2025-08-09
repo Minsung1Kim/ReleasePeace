@@ -1,3 +1,19 @@
+/* Ensure form text is visible in dark mode */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+textarea,
+select {
+  color: var(--rp-fg) !important; /* readable text color */
+  background-color: var(--rp-card-bg) !important; /* match cards */
+  border: 1px solid var(--rp-border) !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--rp-muted) !important; /* lighter placeholder */
+}
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
