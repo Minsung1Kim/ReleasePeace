@@ -1,3 +1,46 @@
+function genCode() {
+  return crypto.randomBytes(8).toString('base64url').slice(0, 12);
+}
+
+// GET /api/companies/:companyId -> { id, name, invite_code, ... }
+router.get('/:companyId',
+  authMiddleware,
+  requireRole('member', 'admin', 'owner'),
+  async (req, res, next) => {
+    try {
+      const { companyId } = req.params;
+      const company = await Company.findByPk(companyId, {
+        attributes: ['id', 'name', 'plan', 'is_active', 'invite_code']
+      });
+      if (!company) return res.status(404).json({ error: 'company not found' });
+
+      // always make sure there IS a code
+      if (!company.invite_code) {
+        company.invite_code = genCode();
+        await company.save();
+      }
+
+      res.json({ id: company.id, name: company.name, plan: company.plan, is_active: company.is_active, invite_code: company.invite_code });
+    } catch (err) { next(err); }
+  }
+);
+
+// POST /api/companies/:companyId/regenerate-invite -> { id, invite_code }
+router.post('/:companyId/regenerate-invite',
+  authMiddleware,
+  requireRole('admin', 'owner'),
+  async (req, res, next) => {
+    try {
+      const { companyId } = req.params;
+      const company = await Company.findByPk(companyId);
+      if (!company) return res.status(404).json({ error: 'company not found' });
+
+      company.invite_code = genCode();
+      await company.save();
+      res.json({ id: company.id, invite_code: company.invite_code });
+    } catch (err) { next(err); }
+  }
+);
 // backend/src/routes/companies.js
 const express = require('express');
 const crypto = require('crypto');
@@ -154,33 +197,6 @@ router.post('/join', authMiddleware, async (req, res, next) => {
 ---------------------------- */
 
 // Get basic company info (incl. invite_code) for members/admin/owner
-router.get('/:companyId', authMiddleware, requireRole('member', 'admin', 'owner'), async (req, res, next) => {
-  try {
-    const { companyId } = req.params;
-    const company = await Company.findByPk(companyId, {
-      attributes: ['id', 'name', 'subdomain', 'plan', 'is_active', 'owner_id', 'invite_code']
-    });
-    if (!company) return res.status(404).json({ success: false, message: 'company not found' });
-    res.json({ success: true, company });
-  } catch (err) { next(err); }
-});
-
-// Regenerate invite code (admin/owner)
-router.post('/:companyId/regenerate-invite',
-  authMiddleware,
-  requireRole('admin', 'owner'),
-  async (req, res, next) => {
-    try {
-      const { companyId } = req.params;
-      const company = await Company.findByPk(companyId);
-      if (!company) return res.status(404).json({ success: false, message: 'company not found' });
-
-      const newCode = crypto.randomBytes(8).toString('base64url').slice(0, 12);
-      await company.update({ invite_code: newCode });
-      res.json({ success: true, id: company.id, invite_code: newCode });
-    } catch (err) { next(err); }
-  }
-);
 
 /* ---------------------------
    MEMBERSHIP MANAGEMENT

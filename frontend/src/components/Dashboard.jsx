@@ -1,22 +1,19 @@
-function InvitePopover({ companyId, companyName }) {
+function InviteCodePopover({ companyId, companyName }) {
   const [open, setOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
-  const inviteUrl = `${window.location.origin}/?invite=${inviteCode}`;
 
   async function loadInvite() {
     const c = await companies.get(companyId);
     setInviteCode(c.invite_code || "");
   }
-
   async function regenerate() {
-    if (!confirm("Regenerate invite? Old links will stop working.")) return;
+    if (!confirm("Regenerate invite code? Old code will stop working.")) return;
     const updated = await companies.regenerateInvite(companyId);
     setInviteCode(updated.invite_code || "");
   }
-
-  async function copyLink() {
-    await navigator.clipboard.writeText(inviteUrl);
-    alert("Invite link copied!");
+  async function copyCode() {
+    await navigator.clipboard.writeText(inviteCode);
+    alert("Invite code copied!");
   }
 
   return (
@@ -30,27 +27,32 @@ function InvitePopover({ companyId, companyName }) {
       >
         Invite
       </button>
+
       {open && (
         <div className="absolute right-0 mt-2 w-72 rounded-lg border bg-white shadow-lg p-3 z-50">
           <div className="text-sm font-semibold mb-2">Invite to {companyName}</div>
-          <input
-            readOnly
-            value={inviteUrl}
-            className="w-full border px-2 py-1 text-xs rounded mb-2"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={copyLink}
-              className="flex-1 border px-2 py-1 rounded text-xs hover:bg-gray-50"
-            >
+
+          <div className="text-xs text-gray-600 mb-1">Invite code</div>
+          <div className="flex items-center gap-2 mb-2">
+            <input
+              readOnly
+              value={inviteCode}
+              className="flex-1 border px-2 py-1 text-sm rounded"
+            />
+            <button onClick={copyCode} className="border px-2 py-1 rounded text-xs hover:bg-gray-50">
               Copy
             </button>
-            <button
-              onClick={regenerate}
-              className="flex-1 border px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50"
-            >
-              Regenerate
-            </button>
+          </div>
+
+          <button
+            onClick={regenerate}
+            className="w-full border px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50"
+          >
+            Regenerate code
+          </button>
+
+          <div className="mt-3 text-[11px] text-gray-500">
+            Share this code with a teammate. They can join via your app’s “Join company” screen.
           </div>
         </div>
       )}
@@ -301,7 +303,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
 
               {company?.role === 'owner' && (
                 <>
-                  <InvitePopover companyId={company.id} companyName={company.name} />
+                  <InviteCodePopover companyId={company.id} companyName={company.name} />
                   <button
                     onClick={openRoles}
                     className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
