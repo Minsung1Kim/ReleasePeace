@@ -37,6 +37,11 @@ export default function ManageRolesModal({
         </div>
 
         <div className="p-2 max-h-[70vh] overflow-y-auto">
+          {members.length <= 1 && (
+            <div className="mx-3 my-2 rounded-lg border border-yellow-300/40 bg-yellow-50/30 p-3 text-sm">
+              You’re the only member of this company. Invite someone to enable transfer or removal.
+            </div>
+          )}
           <ul className="divide-y">
             {members.map((m) => (
               <MemberRow
