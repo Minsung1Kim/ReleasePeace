@@ -1,7 +1,7 @@
 // backend/src/routes/flags.js
 const express = require('express');
-
-const { authMiddleware, requireRole: requireGlobalRole } = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
+const { requireRole } = require('../middleware/roles');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
 
 const { FeatureFlag, FlagState, FlagApproval, AuditLog, User } = require('../models');
@@ -76,7 +76,7 @@ router.post(
   '/',
   authMiddleware,
   extractCompanyContext,
-  requireGlobalRole(['owner', 'pm']),
+  requireRole(['owner', 'pm']),
   async (req, res) => {
     try {
       const {
@@ -227,7 +227,7 @@ router.put(
   '/:flagId/state/:environment',
   authMiddleware,
   extractCompanyContext,
-  requireGlobalRole(['owner', 'pm', 'engineer']),
+  requireRole(['owner', 'pm', 'engineer']),
   async (req, res) => {
     try {
       const { flagId, environment } = req.params;
@@ -297,7 +297,7 @@ router.put(
 
 /* ------------ one-click rollback ------------ */
 
-router.post('/:flagId/rollback', authMiddleware, extractCompanyContext, requireGlobalRole(['owner', 'pm']), async (req, res) => {
+router.post('/:flagId/rollback', authMiddleware, extractCompanyContext, requireRole(['owner', 'pm']), async (req, res) => {
   try {
     const { flagId } = req.params;
     const { reason } = req.body || {};
@@ -331,7 +331,7 @@ router.post('/:flagId/rollback', authMiddleware, extractCompanyContext, requireG
 /* ------------ approvals CRUD ------------ */
 
 // request approval (engineer/pm)
-router.post('/:flagId/approvals', authMiddleware, extractCompanyContext, requireCompanyMembership, requireGlobalRole(['engineer', 'pm']), async (req, res) => {
+router.post('/:flagId/approvals', authMiddleware, extractCompanyContext, requireCompanyMembership, requireRole(['engineer', 'pm']), async (req, res) => {
   try {
     const { flagId } = req.params;
     const { approver_role = 'qa', comments = '' } = req.body || {};
@@ -392,7 +392,7 @@ router.patch('/:flagId/approvals/:approvalId',
   authMiddleware,
   extractCompanyContext,
   requireCompanyMembership,
-  requireGlobalRole(['qa', 'legal', 'owner', 'admin']),
+  requireRole(['qa', 'legal', 'owner', 'admin']),
   async (req, res) => {
     try {
       const { flagId, approvalId } = req.params;
@@ -429,7 +429,7 @@ router.get('/approvals/pending',
   authMiddleware,
   extractCompanyContext,
   requireCompanyMembership,
-  requireGlobalRole(['qa', 'legal', 'owner', 'admin']),
+  requireRole(['qa', 'legal', 'owner', 'admin']),
   async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);

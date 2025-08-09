@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // Adjust to your roles:
-const ROLE_OPTIONS = ["owner", "admin", "member"];
+const ROLE_OPTIONS = ["owner", "admin", "pm", "engineer", "qa", "viewer"];
 
 export default function ManageRolesModal({
   members = [],

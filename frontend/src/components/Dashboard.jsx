@@ -297,8 +297,8 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     }
   } 
   const userRole = company?.role || 'member'
-  const canCreate = ['owner','pm'].includes(userRole)
-  const canToggle = ['owner','pm','engineer'].includes(userRole)
+  const canCreate = ['owner','admin','pm'].includes(userRole)
+  const canToggle = ['owner','admin','pm','engineer'].includes(userRole)
 
  
 

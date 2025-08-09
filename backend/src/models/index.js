@@ -194,7 +194,7 @@ const UserCompany = sequelize.define('UserCompany', {
     }
   },
   role: {
-    type: DataTypes.ENUM('owner', 'admin', 'member'),
+    type: DataTypes.ENUM('owner', 'admin', 'pm', 'engineer', 'qa', 'viewer', 'member'),
     defaultValue: 'member'
   },
   status: {

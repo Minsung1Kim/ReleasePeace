@@ -9,8 +9,8 @@ const { requireRole } = require('../middleware/roles');
 const { User, UserCompany, Company } = require('../models');
 const { Op, fn, col, where } = require('sequelize');
 
-// Allowed per your DB enum
-const ALLOWED_ROLES = ['owner', 'admin', 'member'];
+// Company membership roles
+const ALLOWED_ROLES = ['owner', 'admin', 'pm', 'engineer', 'qa', 'viewer', 'member'];
 
 function genCode() {
   return crypto.randomBytes(8).toString('base64url').slice(0, 12);
