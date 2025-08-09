@@ -444,7 +444,8 @@ app.use((err, req, res, next) => {
 });
 
 // ✅ mount real companies router BEFORE 404
-app.use('/api/companies', require('./routes/companies'));
+const companiesRouter = require('./routes/companies');
+app.use('/api/companies', companiesRouter);
 
 // ❗ keep this LAST
 app.use('*', (req, res) => {
