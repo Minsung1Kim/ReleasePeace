@@ -1,3 +1,17 @@
+// GET invite code for a company
+router.get('/:companyId/invite-code', authMiddleware, requireRole('owner'), async (req, res) => {
+  try {
+    const company = await Company.findByPk(req.params.companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+    if (!company.invite_code) {
+      company.invite_code = genCode();
+      await company.save();
+    }
+    return res.json({ success: true, invite_code: company.invite_code });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get invite code' });
+  }
+});
 function genCode() {
   return crypto.randomBytes(8).toString('base64url').slice(0, 12);
 }

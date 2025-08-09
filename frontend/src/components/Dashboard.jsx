@@ -1,6 +1,7 @@
 function InviteCodePopover({ companyId, companyName }) {
   const [open, setOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
+  const inviteText = inviteCode || 'No code';
 
   async function loadInvite() {
     const c = await companies.get(companyId);
@@ -12,7 +13,7 @@ function InviteCodePopover({ companyId, companyName }) {
     setInviteCode(updated.invite_code || "");
   }
   async function copyCode() {
-    await navigator.clipboard.writeText(inviteCode);
+    await navigator.clipboard.writeText(inviteText);
     alert("Invite code copied!");
   }
 
@@ -36,8 +37,8 @@ function InviteCodePopover({ companyId, companyName }) {
           <div className="flex items-center gap-2 mb-2">
             <input
               readOnly
-              value={inviteCode}
-              className="flex-1 border px-2 py-1 text-sm rounded"
+              value={inviteText}
+              className="w-full border px-2 py-1 text-xs rounded mb-2"
             />
             <button onClick={copyCode} className="border px-2 py-1 rounded text-xs hover:bg-gray-50">
               Copy

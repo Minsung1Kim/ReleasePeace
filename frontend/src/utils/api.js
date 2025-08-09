@@ -1,3 +1,7 @@
+// Get invite code for a company
+export async function getInviteCode(companyId) {
+  return apiRequest(`/api/companies/${companyId}/invite-code`);
+}
 
 import { config } from '../config';
 
