@@ -1,11 +1,10 @@
 // backend/src/routes/flags.js
 const express = require('express');
 
-const { authMiddleware } = require('../middleware/auth');               // auth only
+const { requireRole } = require('../middleware/roles');
+const { authMiddleware } = require('../middleware/auth');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
-const { requireRole } = require('../middleware/roles');                 // company-aware role check
 const { FeatureFlag, FlagState, User } = require('../models');
-const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -184,18 +183,20 @@ router.put(
   '/:flagId/state/:environment',
   authMiddleware,
   extractCompanyContext,
-  requireRole('owner', 'pm', 'engineer'),
+  requireRole('owner','pm','engineer'),
   async (req, res) => {
     try {
-      const { flagId, environment } = req.params;           // <-- fixed
+      const { flagId, environment } = req.params;
       const { is_enabled, rollout_percentage, targeting_rules } = req.body;
 
-      const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId, is_active: true } });
-      if (!flag) return res.status(404).json({ success: false, error: 'Flag not found' });
+      const flag = await FeatureFlag.findOne({
+        where: { id: flagId, company_id: req.companyId }
+      });
+      if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-      let state = await FlagState.findOne({ where: { flag_id: flagId, environment } });
-      if (!state) {
-        state = await FlagState.create({
+      let flagState = await FlagState.findOne({ where: { flag_id: flagId, environment } });
+      if (!flagState) {
+        flagState = await FlagState.create({
           flag_id: flagId,
           environment,
           is_enabled: false,
@@ -205,17 +206,17 @@ router.put(
         });
       }
 
-      await state.update({
-        is_enabled: typeof is_enabled === 'boolean' ? is_enabled : state.is_enabled,
-        rollout_percentage: typeof rollout_percentage === 'number' ? rollout_percentage : state.rollout_percentage,
-        targeting_rules: targeting_rules ?? state.targeting_rules,
+      await flagState.update({
+        is_enabled: is_enabled ?? flagState.is_enabled,
+        rollout_percentage: rollout_percentage ?? flagState.rollout_percentage,
+        targeting_rules: targeting_rules ?? flagState.targeting_rules,
         updated_by: req.user.id
       });
 
-      res.json({ success: true, flag_state: state });
+      res.json({ success: true, flag_state: flagState });
     } catch (err) {
       console.error('Error updating flag state:', err);
-      res.status(500).json({ success: false, error: 'Failed to update flag state' });
+      res.status(500).json({ error: 'Failed to update flag state', message: err.message });
     }
   }
 );
