@@ -278,6 +278,8 @@ app.get('/api/users', (req, res) => {
 });
 
 // ========== COMPANY ROUTES ==========
+// ========== FLAG ROUTES ==========
+app.use('/api/flags', require('./routes/flags'));
 
 // ========== FLAG ROUTES ==========
 
