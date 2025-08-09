@@ -500,26 +500,6 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
           )}
         </div>
 
-        {/* Company Info */}
-        <div className="mt-8 rp-card p-6">
-          <h3 className="font-semibold rp-heading mb-2">🎉 Multi-Tenant Setup Complete!</h3>
-          {company?.role === 'owner' && (
-            <button onClick={openRoles} className="px-3 py-2 bg-[var(--rp-accent)] rounded-md">
-              Manage Roles
-            </button>
-          )}
-          <p className="text-sm text-[var(--rp-muted)] mb-2">
-            You're viewing flags for <strong>{company?.name}</strong>. Each company has completely isolated data.
-          </p>
-          <div className="text-sm text-[var(--rp-muted)]">
-            <strong>Company Details:</strong><br/>
-            • Name: {company?.name}<br/>
-            • Subdomain: {company?.subdomain}<br/>
-            • Plan: {company?.plan}<br/>
-            • Your Role: {company?.role}
-          </div>
-        </div>
-
       </div>
       {rolesOpen && (
         <ManageRolesModal
