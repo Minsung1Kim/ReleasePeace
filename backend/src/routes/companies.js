@@ -41,14 +41,49 @@ router.get('/mine', authMiddleware, async (req, res, next) => {
 router.post('/', authMiddleware, async (req, res, next) => {
   const t = await Company.sequelize.transaction();
   try {
-    const { name, subdomain, plan = 'starter' } = req.body || {};
-    if (!name) return res.status(400).json({ success: false, message: 'name is required' });
+    let { name, subdomain, plan = 'starter' } = req.body || {};
+    if (!name) {
+      await t.rollback();
+      return res.status(400).json({ success: false, message: 'name is required' });
+    }
+
+    // slugify helper to satisfy /^[a-z0-9-]+$/ and lowercase
+    const slugify = (s) => {
+      return String(s || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')   // non allowed → dash
+        .replace(/^-+|-+$/g, '')        // trim dashes
+        .replace(/--+/g, '-')           // collapse
+        .slice(0, 50) || null;
+    };
+
+    // If subdomain missing or invalid, derive from name
+    const validRe = /^[a-z0-9-]+$/;
+    if (!subdomain || !validRe.test(subdomain)) {
+      subdomain = slugify(name);
+    }
+    // If still empty (e.g., name is all symbols), fall back to a random slug
+    if (!subdomain) {
+      subdomain = `team-${crypto.randomBytes(3).toString('hex')}`;
+    }
+
+    // Ensure uniqueness by adding a suffix on collision
+    // (lightweight attempt – DB unique constraint is the source of truth)
+    let finalSub = subdomain;
+    let attempt = 0;
+    // try up to 3 suffixes before letting DB error bubble
+    while (attempt < 3) {
+      const exists = await Company.findOne({ where: { subdomain: finalSub }, transaction: t });
+      if (!exists) break;
+      attempt += 1;
+      finalSub = `${subdomain}-${attempt}`;
+    }
 
     const invite_code = crypto.randomBytes(8).toString('base64url').slice(0, 12);
 
     const company = await Company.create({
       name,
-      subdomain,
+      subdomain: finalSub,
       plan,
       owner_id: req.user.id,
       invite_code,
@@ -63,7 +98,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
     }, { transaction: t });
 
     await t.commit();
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       company: {
         id: company.id,
@@ -74,7 +109,18 @@ router.post('/', authMiddleware, async (req, res, next) => {
         role: 'owner'
       }
     });
-  } catch (err) { await t.rollback(); next(err); }
+  } catch (err) {
+    await t.rollback();
+    // Return clean JSON for validation errors
+    if (err.name === 'SequelizeValidationError') {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: err.errors?.map(e => ({ path: e.path, message: e.message }))
+      });
+    }
+    return next(err);
+  }
 });
 
 // Join a company by invite code
