@@ -1,4 +1,63 @@
-// frontend/src/components/Dashboard.jsx - ENHANCED VERSION WITH YOUR THEME
+function InvitePopover({ companyId, companyName }) {
+  const [open, setOpen] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
+  const inviteUrl = `${window.location.origin}/?invite=${inviteCode}`;
+
+  async function loadInvite() {
+    const c = await companies.get(companyId);
+    setInviteCode(c.invite_code || "");
+  }
+
+  async function regenerate() {
+    if (!confirm("Regenerate invite? Old links will stop working.")) return;
+    const updated = await companies.regenerateInvite(companyId);
+    setInviteCode(updated.invite_code || "");
+  }
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(inviteUrl);
+    alert("Invite link copied!");
+  }
+
+  return (
+    <div className="relative">
+      <button
+        className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+        onClick={async () => {
+          if (!open) await loadInvite();
+          setOpen(!open);
+        }}
+      >
+        Invite
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-72 rounded-lg border bg-white shadow-lg p-3 z-50">
+          <div className="text-sm font-semibold mb-2">Invite to {companyName}</div>
+          <input
+            readOnly
+            value={inviteUrl}
+            className="w-full border px-2 py-1 text-xs rounded mb-2"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={copyLink}
+              className="flex-1 border px-2 py-1 rounded text-xs hover:bg-gray-50"
+            >
+              Copy
+            </button>
+            <button
+              onClick={regenerate}
+              className="flex-1 border px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50"
+            >
+              Regenerate
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+import { companies, getCompanyMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
 import React, { useState, useEffect } from 'react'
 import ManageRolesModal from "./ManageRolesModal";
 import * as api from '../utils/api';
@@ -227,6 +286,19 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               <div className="text-sm text-gray-500">
                 API: {apiStatus}
               </div>
+
+              {company?.role === 'owner' && (
+                <>
+                  <InvitePopover companyId={company.id} companyName={company.name} />
+                  <button
+                    onClick={openRoles}
+                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                  >
+                    Manage Roles
+                  </button>
+                </>
+              )}
+
               <button
                 onClick={onSwitchCompany}
                 className="text-sm text-blue-600 hover:text-blue-500 px-3 py-1 border border-blue-200 rounded-md hover:bg-blue-50"
