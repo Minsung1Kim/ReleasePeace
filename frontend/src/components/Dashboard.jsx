@@ -552,22 +552,24 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setLoading(true)
+    e.preventDefault();
+    setLoading(true);
 
     const flagData = {
       ...formData,
-      tags: formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag)
-    }
+      tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean)
+    };
 
     try {
-      await onCreate(flagData)
+      await onCreate(flagData); // parent will add + refetch
+      onClose();                // close right away for snappy UX
     } catch (err) {
-      console.error('Create flag error:', err)
+      console.error('Create flag error:', err);
+      alert(err.message || 'Failed to create flag');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

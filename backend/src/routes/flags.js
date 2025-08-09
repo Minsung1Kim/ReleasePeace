@@ -4,7 +4,6 @@ const { requireRole } = require('../middleware/roles');
 
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
-const flagService = require('../services/flagService');
 const { FeatureFlag, FlagState, User } = require('../models');
 
 const router = express.Router();
@@ -12,6 +11,7 @@ const router = express.Router();
 // Get all flags for a company (requires company context)
 router.get('/', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
   try {
+const { requireRole } = require('../middleware/roles'); // <-- keep THIS one (company-aware)
     const flags = await FeatureFlag.findAll({
       where: { 
         company_id: req.companyId  // FILTER BY COMPANY
