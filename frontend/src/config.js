@@ -1,7 +1,5 @@
-export const API_BASE_URL = 'https://releasepeace-production.up.railway.app';
-
+// frontend/src/config.js
 export const config = {
-  apiUrl: API_BASE_URL,
-  version: '1.0.0',
-  environment: 'production'
+  // Backend origin (no trailing slash). We append "/api/..." in api.js
+  apiUrl: import.meta.env.VITE_API_BASE || "https://releasepeace-production.up.railway.app",
 };

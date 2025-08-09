@@ -1,5 +1,5 @@
-// ...existing code...
-// frontend/src/utils/api.js - NEW FILE
+
+import { config } from '../config';
 
 
 class ApiError extends Error {
