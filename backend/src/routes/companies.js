@@ -116,11 +116,16 @@ router.post('/', authMiddleware, async (req, res, next) => {
 });
 
 // Join by invite code
+// Join by invite code
 router.post('/join', authMiddleware, async (req, res, next) => {
   const t = await Company.sequelize.transaction();
   try {
-    const { invite_code } = req.body || {};
+    const raw = (req.body?.invite_code ?? '');
+    const invite_code = String(raw).trim();              // 👈 trim just in case
     if (!invite_code) return res.status(400).json({ success: false, message: 'invite_code is required' });
+
+    // quick visibility in logs
+    console.log('Join attempt with invite_code:', invite_code);
 
     const company = await Company.findOne({ where: { invite_code, is_active: true }, transaction: t });
     if (!company) return res.status(404).json({ success: false, message: 'Invalid invite code' });
