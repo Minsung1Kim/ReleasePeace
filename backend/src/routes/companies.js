@@ -1,3 +1,41 @@
+const crypto = require('crypto');
+
+// GET /api/companies/:companyId  -> return basic info + invite_code
+router.get('/:companyId',
+  authMiddleware,
+  requireRole('member', 'admin', 'owner'),
+  async (req, res, next) => {
+    try {
+      const { companyId } = req.params;
+      const company = await Company.findByPk(companyId, {
+        attributes: ['id', 'name', 'invite_code', 'owner_id', 'plan', 'is_active']
+      });
+      if (!company) return res.status(404).json({ error: 'company not found' });
+      res.json(company);
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// POST /api/companies/:companyId/regenerate-invite  -> admin/owner only
+router.post('/:companyId/regenerate-invite',
+  authMiddleware,
+  requireRole('admin', 'owner'),
+  async (req, res, next) => {
+    try {
+      const { companyId } = req.params;
+      const company = await Company.findByPk(companyId);
+      if (!company) return res.status(404).json({ error: 'company not found' });
+
+      const newCode = crypto.randomBytes(8).toString('base64url').slice(0, 12);
+      await company.update({ invite_code: newCode });
+      res.json({ id: company.id, invite_code: newCode });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 // backend/src/routes/companies.js
 const express = require('express');
 const router = express.Router();
