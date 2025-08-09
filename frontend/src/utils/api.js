@@ -1,5 +1,45 @@
-// frontend/src/utils/api.js - NEW FILE
+export async function getCompanyMembers(companyId) {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/members`, {
+    headers: { ...(await authHeader()) },
+  });
+  if (!res.ok) throw new Error(`Fetch members failed (${res.status})`);
+  return res.json();
+}
 import { config } from '../config'
+
+
+export async function updateMemberRole(companyId, userId, role) {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/members/${userId}/role`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...(await authHeader()) },
+    body: JSON.stringify({ role }),
+  });
+  if (!res.ok) throw new Error(`Update role failed (${res.status})`);
+  return res.json();
+}
+
+// POST /api/companies/:companyId/ownership
+export async function transferOwnership(companyId, newOwnerUserId) {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/ownership`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await authHeader()) },
+    body: JSON.stringify({ userId: newOwnerUserId }),
+  });
+  if (!res.ok) throw new Error(`Transfer ownership failed (${res.status})`);
+  return res.json();
+}
+
+// DELETE /api/companies/:companyId/members/:userId
+export async function removeMember(companyId, userId) {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/members/${userId}`, {
+    method: "DELETE",
+    headers: { ...(await authHeader()) },
+  });
+  if (!res.ok) throw new Error(`Remove member failed (${res.status})`);
+  return res.json();
+}
+// frontend/src/utils/api.js - NEW FILE
+
 
 class ApiError extends Error {
   constructor(message, status, data) {

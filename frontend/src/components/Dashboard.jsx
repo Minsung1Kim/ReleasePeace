@@ -1,5 +1,7 @@
 // frontend/src/components/Dashboard.jsx - ENHANCED VERSION WITH YOUR THEME
 import React, { useState, useEffect } from 'react'
+import ManageRolesModal from "./ManageRolesModal";
+import * as api from '../utils/api';
 import { config } from '../config'
 
 const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }) => {
@@ -17,8 +19,16 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   const [selectedFlag, setSelectedFlag] = useState(null)
   const [activeEnvironment, setActiveEnvironment] = useState('production')
   const [showCreateFlag, setShowCreateFlag] = useState(false)
-  const [showRoleModal, setShowRoleModal] = useState(false)
-  const [companyMembers, setCompanyMembers] = useState([])
+  // New state for roles modal
+  const [rolesOpen, setRolesOpen] = useState(false);
+  const [members, setMembers] = useState([]);
+
+  // Function to open Manage Roles modal and fetch members
+  async function openRoles() {
+    const list = await api.getCompanyMembers(company.id);
+    setMembers(list);
+    setRolesOpen(true);
+  }
 
   // Always use a fresh Firebase ID token and retry once on 401
   const authedFetch = async (path, opts = {}, retry = true) => {
@@ -420,10 +430,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
           <h3 className="font-semibold rp-heading mb-2">🎉 Multi-Tenant Setup Complete!</h3>
           {company?.role === 'owner' && (
             <button
-              onClick={async () => {
-                await fetchCompanyWithMembers();
-                setShowRoleModal(true);
-              }}
+              onClick={openRoles}
               className="px-3 py-2 bg-[var(--rp-accent)] rounded-md"
             >
               Manage Roles
@@ -442,34 +449,16 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
         </div>
 
       </div>
-      {showRoleModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-          <div className="rp-card max-w-lg w-full p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Manage Roles</h2>
-              <button className="rp-badge" onClick={() => setShowRoleModal(false)}>Close</button>
-            </div>
-
-            {companyMembers.length === 0 ? (
-              <p className="text-sm text-[var(--rp-muted)]">
-                No members found. (Tip: make sure you’re the owner and that the request included <code>X-Company-ID</code>.)
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {companyMembers.map(m => (
-                  <div key={m.id} className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium">{m.display_name || m.username}</div>
-                      <div className="text-xs text-[var(--rp-muted)]">{m.email}</div>
-                    </div>
-                    <span className="rp-badge">{m.role}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ManageRolesModal
+        open={rolesOpen}
+        onClose={() => setRolesOpen(false)}
+        company={company}
+        members={members}
+        refresh={async () => {
+          const list = await api.getCompanyMembers(company.id);
+          setMembers(list);
+        }}
+      />
     </div>
   )
 }

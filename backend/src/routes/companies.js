@@ -1,3 +1,45 @@
+const { requireAuth } = require('../middleware/auth');   // your auth middleware
+const { requireRole: ensureCompanyRole } = require('../middleware/roles'); // e.g., ("admin" or above)
+// GET members
+router.get('/:companyId/members', requireAuth, ensureCompanyRole('viewer'), async (req, res) => {
+  // TODO: Replace with your actual DB/model call
+  // Example: CompanyMember.findAll({ where: { company_id: req.params.companyId } })
+  const members = await req.db.getCompanyMembers(req.params.companyId);
+  res.json(members);
+});
+
+// PATCH role
+router.patch('/:companyId/members/:userId/role',
+  requireAuth, ensureCompanyRole('admin'),
+  async (req, res) => {
+    const { role } = req.body;
+    // validate role
+    const allowed = ['owner','admin','pm','qa','viewer'];
+    if (!allowed.includes(role)) return res.status(400).json({ error: 'invalid role' });
+
+    await req.db.setMemberRole(req.params.companyId, req.params.userId, role);
+    res.json({ ok: true });
+  }
+);
+
+// POST transfer ownership
+router.post('/:companyId/ownership',
+  requireAuth, ensureCompanyRole('owner'),
+  async (req, res) => {
+    const { userId } = req.body;
+    await req.db.transferOwnership(req.params.companyId, userId);
+    res.json({ ok: true });
+  }
+);
+
+// DELETE member
+router.delete('/:companyId/members/:userId',
+  requireAuth, ensureCompanyRole('admin'),
+  async (req, res) => {
+    await req.db.removeMember(req.params.companyId, req.params.userId);
+    res.json({ ok: true });
+  }
+);
 // backend/src/routes/companies.js
 const express = require('express');
 const crypto = require('crypto');
