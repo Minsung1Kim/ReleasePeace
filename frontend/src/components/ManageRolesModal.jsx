@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 // Adjust to your roles:
-const ROLE_OPTIONS = ["owner", "admin", "pm", "qa", "viewer"];
+const ROLE_OPTIONS = ["owner", "admin", "member"];
 
 export default function ManageRolesModal({
   members = [],
@@ -84,7 +84,7 @@ function MemberRow({
   const isSelf = currentUserId && member.id === currentUserId;
 
   const doChangeRole = async (role) => {
-    setOpen(false);
+    setMenuOpen(false);
     if (!onChangeRole) return;
     if (role === member.role) return;
     // Prevent demoting owner via quick menu (optional rule)
@@ -96,14 +96,14 @@ function MemberRow({
   };
 
   const doTransfer = async () => {
-    setOpen(false);
+    setMenuOpen(false);
     if (!onTransferOwnership) return;
     if (!confirm(`Transfer ownership to ${member.email}?`)) return;
     await onTransferOwnership(member.id);
   };
 
   const doRemove = async () => {
-    setOpen(false);
+    setMenuOpen(false);
     if (!onRemoveMember) return;
     if (isOwner) {
       alert("Cannot remove current owner.");
