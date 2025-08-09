@@ -197,19 +197,31 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(flagData)
-      })
-      const data = await response.json()
-      if (data.success) {
-        setFlags([data.flag, ...flags])
-        setShowCreateFlag(false)
-      } else {
-        throw new Error(data.message || 'Failed to create flag')
+      });
+
+      const data = await response.json();
+
+      // accept either { success, flag } or just the flag
+      const newFlag = data?.flag ?? data;
+
+      if (!response.ok || (!data?.success && !newFlag?.id)) {
+        throw new Error(data?.message || 'Failed to create flag');
       }
+
+      // optimistic add (not required but makes UI snappy)
+      if (newFlag?.id) {
+        setFlags(prev => [newFlag, ...prev]);
+      }
+
+      // ensure we’re in sync with server
+      await fetchFlags();
+
+      setShowCreateFlag(false);
     } catch (err) {
-      console.error('Failed to create flag:', err)
-      alert(err.message)
+      console.error('Failed to create flag:', err);
+      alert(err.message || 'Failed to create flag');
     }
-  }
+  };
 
   const toggleFlagState = async (flagId, environment, currentState) => {
     try {
