@@ -615,48 +615,6 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
   )
 }
 
-// Modal for managing member roles
-const ManageRolesModal = ({ members, onClose, onChangeRole }) => {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full">
-        <h2 className="text-lg font-semibold mb-4">Manage Member Roles</h2>
-
-        {members.length === 0 ? (
-          <p className="text-sm text-gray-600">No members found.</p>
-        ) : (
-          <div className="space-y-4">
-            {members.map(member => (
-              <div key={member.id} className="flex justify-between items-center">
-                <div>
-                  <div className="text-sm font-medium">{member.display_name || member.username}</div>
-                  <div className="text-xs text-gray-500">{member.email}</div>
-                </div>
-                <select
-                  value={member.role}
-                  onChange={e => onChangeRole(member.id, e.target.value)}
-                  className="text-sm border px-2 py-1 rounded bg-white"
-                >
-                  {['owner', 'pm', 'engineer', 'qa', 'legal'].map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 text-sm rounded hover:bg-gray-300"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// ...existing code...
 
 export default Dashboard
