@@ -84,6 +84,23 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   // New state for roles modal
   const [rolesOpen, setRolesOpen] = useState(false);
   const [members, setMembers] = useState([]);
+  // Recent activity state
+  const [recent, setRecent] = useState([]);
+  const [recentLoading, setRecentLoading] = useState(false);
+  // Recent activity loader
+  async function loadRecent() {
+    setRecentLoading(true);
+    try {
+      const res = await authedFetch(`/api/flags/audit/recent?limit=20`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load recent activity');
+      setRecent(data.logs || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setRecentLoading(false);
+    }
+  }
 
   // Approvals and Audit state
   const [approvalsOpen, setApprovalsOpen] = useState(false);
@@ -205,11 +222,12 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     // Test API connection
     fetch(`${config.apiUrl}/health`)
       .then(res => res.json())
-      .then(data => setApiStatus('✅ Connected!'))
-      .catch(err => setApiStatus('❌ Connection failed'))
+      .then(() => setApiStatus('✅ Connected!'))
+      .catch(() => setApiStatus('❌ Connection failed'));
 
     // Fetch flags for this company
-    fetchFlags()
+    fetchFlags();
+    loadRecent();
   }, [company, token])
 
   const fetchFlags = async () => {
@@ -460,6 +478,45 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
             <div className="text-3xl font-bold text-purple-600">3</div>
             <div className="text-sm text-gray-600">Environments</div>
           </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="rp-card p-0 overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Recent Activity</h2>
+            <button onClick={loadRecent} className="px-3 py-1 border rounded text-sm hover:bg-gray-100">
+              Refresh
+            </button>
+          </div>
+
+          {recentLoading ? (
+            <div className="p-6 text-sm text-gray-500">Loading…</div>
+          ) : recent.length === 0 ? (
+            <div className="p-6 text-sm text-gray-500">No audit entries yet.</div>
+          ) : (
+            <ul className="divide-y divide-gray-200">
+              {recent.map((r) => (
+                <li key={r.id} className="px-6 py-3 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-sm">
+                      <span className="font-medium">
+                        {r.user?.display_name || r.user?.username || r.user?.email || 'Unknown'}
+                      </span>
+                      <span className="mx-2">•</span>
+                      <span>{r.action}</span>
+                      {r.environment && (
+                        <span className="ml-2 rp-badge text-[10px]">{r.environment}</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {r.flag?.name || '—'} — {new Date(r.created_at).toLocaleString()}
+                    </div>
+                    {r.reason && <div className="text-xs mt-1 opacity-90">“{r.reason}”</div>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         {/* Environment Selector */}
