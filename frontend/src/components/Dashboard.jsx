@@ -226,25 +226,46 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     }
   };
 
-  const toggleFlagState = async (flagId, environment, currentState) => {
+  const toggleFlagState = async (flagId, environment, currentState, flag) => {
     try {
+      const enabling = !currentState.is_enabled;
+
+      // ask for justification when enabling (esp. high/critical/prod)
+      let reason = '';
+      if (enabling) {
+        const needsReason =
+          environment === 'production' &&
+          (flag?.risk_level === 'high' || flag?.risk_level === 'critical');
+
+        reason = window.prompt(
+          needsReason
+            ? 'Change justification (required for high/critical in production):'
+            : 'Optional: reason for this change?'
+        ) || '';
+
+        if (needsReason && !reason.trim()) {
+          alert('A justification is required to enable this flag in production.');
+          return;
+        }
+      }
+
       const response = await authedFetch(`/api/flags/${flagId}/state/${environment}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_enabled: !currentState.is_enabled })
-      })
-      const data = await response.json()
-      if (data.success) {
-        // Refresh flags to get updated state
-        fetchFlags()
+        body: JSON.stringify({ is_enabled: enabling, reason })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        await fetchFlags();
       } else {
-        throw new Error(data.message || 'Failed to update flag state')
+        throw new Error(data.message || data.error || 'Failed to update flag state');
       }
     } catch (err) {
-      console.error('Failed to toggle flag:', err)
-      alert(err.message)
+      console.error('Failed to toggle flag:', err);
+      alert(err.message || 'Failed to toggle flag');
     }
-  }
+  };
 
   const getRiskColor = (risk) => {
     switch (risk) {
@@ -480,7 +501,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                             </div>
                             <button
                               onClick={() => canToggle
-                                ? toggleFlagState(flag.id, activeEnvironment, currentEnvState)
+                                ? toggleFlagState(flag.id, activeEnvironment, currentEnvState, flag)
                                 : alert('You do not have permission to toggle flags.')
                               }
                               className="px-3 py-1 rounded text-xs font-medium rp-btn-primary disabled:opacity-50"
@@ -488,6 +509,31 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                             >
                               {currentEnvState.is_enabled ? 'Disable' : 'Enable'}
                             </button>
+                            {['owner','pm'].includes(userRole) && (
+                              <button
+                                onClick={async () => {
+                                  const why = window.prompt('Emergency reason for rollback (disables in all environments):') || '';
+                                  if (!window.confirm('Disable this flag in ALL environments?')) return;
+                                  try {
+                                    const res = await authedFetch(`/api/flags/${flag.id}/rollback`, {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ reason: why })
+                                    });
+                                    const data = await res.json();
+                                    if (!res.ok || !data.success) throw new Error(data.message || 'Rollback failed');
+                                    await fetchFlags();
+                                    alert('Rollback completed.');
+                                  } catch (e) {
+                                    alert(e.message || 'Rollback failed');
+                                  }
+                                }}
+                                className="px-3 py-1 rounded text-xs font-medium border border-red-300 hover:bg-red-50 ml-2"
+                                title="Disable in all environments"
+                              >
+                                Rollback
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <div className="text-xs text-gray-500">No state</div>

@@ -1,11 +1,11 @@
 // backend/src/routes/companies.js
+// backend/src/routes/companies.js
 const express = require('express');
 const crypto = require('crypto');
-
 const router = express.Router();
 
 const { authMiddleware } = require('../middleware/auth');
-const { requireRole } = require('../middleware/roles'); // company-aware roles check
+const { requireRole } = require('../middleware/roles');
 const { User, UserCompany, Company } = require('../models');
 
 // Allowed per your DB enum
