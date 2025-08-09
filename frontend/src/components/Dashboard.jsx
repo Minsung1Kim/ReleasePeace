@@ -61,7 +61,104 @@ function InviteCodePopover({ companyId, companyName }) {
   );
 }
 import { companies, getCompanyMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+// Compact recent activity bell
+function ActivityBell({ authedFetch }) {
+  const [open, setOpen] = useState(false);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const btnRef = useRef(null);
+
+  const timeAgo = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return '';
+    const s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return `${s}s ago`;
+    const m = Math.floor(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return d.toLocaleDateString();
+  };
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await authedFetch(`/api/flags/audit/recent?limit=10`);
+      const data = await res.json();
+      if (res.ok && data?.success) setLogs(data.logs || []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { if (open) load(); }, [open]);
+
+  useEffect(() => {
+    const onDown = (e) => e.key === 'Escape' && setOpen(false);
+    const onClickAway = (e) => {
+      if (!open) return;
+      if (btnRef.current && !btnRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('keydown', onDown);
+    document.addEventListener('mousedown', onClickAway);
+    return () => {
+      document.removeEventListener('keydown', onDown);
+      document.removeEventListener('mousedown', onClickAway);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative">
+      <button
+        ref={btnRef}
+        onClick={() => setOpen(v => !v)}
+        className="w-9 h-9 inline-flex items-center justify-center rounded-lg border hover:bg-gray-100"
+        title="Recent activity"
+      >
+        {/* bell icon */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm6-6V11a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2Z"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 max-w-[22rem] rounded-xl border bg-white shadow-xl z-50">
+          <div className="px-3 py-2 border-b text-sm font-semibold">Recent Activity</div>
+          <div className="max-h-80 overflow-auto">
+            {loading ? (
+              <div className="p-3 text-xs text-gray-500">Loading…</div>
+            ) : logs.length === 0 ? (
+              <div className="p-3 text-xs text-gray-500">No activity yet.</div>
+            ) : (
+              <ul className="divide-y">
+                {logs.slice(0, 10).map(l => (
+                  <li key={l.id} className="px-3 py-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="truncate">
+                        <span className="font-medium">
+                          {l.user?.display_name || l.user?.username || l.user?.email || 'Unknown'}
+                        </span>
+                        <span className="mx-1">·</span>
+                        <span className="truncate">{l.action}</span>
+                        {l.environment && <span className="ml-1 rp-badge">{l.environment}</span>}
+                      </div>
+                      <div className="text-[10px] text-gray-500 ml-2 shrink-0">{timeAgo(l.created_at)}</div>
+                    </div>
+                    <div className="text-[11px] text-gray-500 truncate">
+                      {(l.flag?.name || '')}{l.reason ? ` — “${l.reason}”` : ''}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 import ManageRolesModal from "./ManageRolesModal";
 import * as api from '../utils/api';
 import { config } from '../config'
@@ -409,17 +506,14 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-500">
-                API: {apiStatus}
-              </div>
+              <div className="text-sm text-gray-500">API: {apiStatus}</div>
+              {/* NEW: compact recent activity */}
+              <ActivityBell authedFetch={authedFetch} />
 
               {company?.role === 'owner' && (
                 <>
                   <InviteCodePopover companyId={company.id} companyName={company.name} />
-                  <button
-                    onClick={openRoles}
-                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  >
+                  <button onClick={openRoles} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Manage Roles
                   </button>
                 </>
@@ -480,44 +574,6 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <div className="rp-card p-0 overflow-hidden mb-6">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Recent Activity</h2>
-            <button onClick={loadRecent} className="px-3 py-1 border rounded text-sm hover:bg-gray-100">
-              Refresh
-            </button>
-          </div>
-
-          {recentLoading ? (
-            <div className="p-6 text-sm text-gray-500">Loading…</div>
-          ) : recent.length === 0 ? (
-            <div className="p-6 text-sm text-gray-500">No audit entries yet.</div>
-          ) : (
-            <ul className="divide-y divide-gray-200">
-              {recent.map((r) => (
-                <li key={r.id} className="px-6 py-3 flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="text-sm">
-                      <span className="font-medium">
-                        {r.user?.display_name || r.user?.username || r.user?.email || 'Unknown'}
-                      </span>
-                      <span className="mx-2">•</span>
-                      <span>{r.action}</span>
-                      {r.environment && (
-                        <span className="ml-2 rp-badge text-[10px]">{r.environment}</span>
-                      )}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {r.flag?.name || '—'} — {new Date(r.created_at).toLocaleString()}
-                    </div>
-                    {r.reason && <div className="text-xs mt-1 opacity-90">“{r.reason}”</div>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
 
         {/* Environment Selector */}
         <div className="rp-card p-4 mb-6">
