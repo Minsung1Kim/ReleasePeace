@@ -168,7 +168,6 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   // New state for roles modal
   const [rolesOpen, setRolesOpen] = useState(false);
   const [members, setMembers] = useState([]);
-  const [myRole, setMyRole] = useState(company?.role || 'member');
   // Recent activity state
   const [recent, setRecent] = useState([]);
   const [recentLoading, setRecentLoading] = useState(false);
@@ -247,21 +246,11 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   async function refreshMembers() {
     const list = await api.getCompanyMembers(company.id);
     setMembers(list);
-    // also refresh *my* role from the server
-    const me = list.find(m => m.id === user?.id);
-    if (me?.role) {
-      setMyRole(me.role);
-      // persist so header on reload is right
-      try {
-        const raw = localStorage.getItem('releasepeace_company');
-        if (raw) {
-          const c = JSON.parse(raw);
-          if (c?.id === company.id && c.role !== me.role) {
-            localStorage.setItem('releasepeace_company', JSON.stringify({ ...c, role: me.role }));
-          }
-        }
-      } catch {}
-    }
+  }
+
+  async function openRoles() {
+    await refreshMembers();
+    setRolesOpen(true);
   }
 
   // Always use a fresh Firebase ID token and retry once on 401
@@ -307,9 +296,9 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
       console.error('Failed to fetch company members:', err);
     }
   } 
-  const userRole = myRole || company?.role || 'member';
-  const canCreate = ['owner','pm'].includes(userRole);
-  const canToggle = ['owner','pm','engineer'].includes(userRole);
+  const userRole = company?.role || 'member'
+  const canCreate = ['owner','admin','pm'].includes(userRole)
+  const canToggle = ['owner','admin','pm','engineer'].includes(userRole)
 
  
 
@@ -323,8 +312,6 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     // Fetch flags for this company
     fetchFlags();
     loadRecent();
-    // and get members/myRole so permissions are accurate
-    refreshMembers();
   }, [company, token])
 
   const fetchFlags = async () => {
@@ -510,19 +497,21 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               {/* NEW: compact recent activity */}
               <ActivityBell authedFetch={authedFetch} />
 
-              {['owner','admin'].includes(userRole) ? (
+              {company?.role === 'owner' && (
                 <>
-                  {userRole === 'owner' && <InviteCodePopover companyId={company.id} companyName={company.name} />}
+                  <InviteCodePopover companyId={company.id} companyName={company.name} />
                   <button onClick={openRoles} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Manage Roles
                   </button>
                 </>
-              ) : (
+              )}
+              {/* Approvals button for eligible roles */}
+              {['qa','legal','owner','admin'].includes(user.role) && (
                 <button
-                  onClick={async () => { await refreshMembers(); setRolesOpen(true); }}
+                  onClick={openApprovals}
                   className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
                 >
-                  Team
+                  Approvals
                 </button>
               )}
 
@@ -534,7 +523,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               </button>
               <div className="text-sm text-gray-500 border-l pl-4">
                 <div className="font-medium">{user.display_name || user.username}</div>
-                <div className="text-xs">{user.role} • {userRole}</div>
+                <div className="text-xs">{user.role} • {company?.role}</div>
               </div>
               <button
                 onClick={onLogout}
@@ -768,18 +757,20 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
           members={members}
           currentUserId={user?.id}
           onClose={() => setRolesOpen(false)}
-          readOnly={!['owner','admin'].includes(userRole)}
-          onChangeRole={!['owner','admin'].includes(userRole) ? undefined : async (userId, role) => {
+          onChangeRole={async (userId, role) => {
             await api.updateMemberRole(company.id, userId, role);
-            await refreshMembers(); // refresh members + myRole
+            const list = await api.getCompanyMembers(company.id);
+            setMembers(list);
           }}
-          onTransferOwnership={userRole !== 'owner' ? undefined : async (userId) => {
+          onTransferOwnership={async (userId) => {
             await api.transferOwnership(company.id, userId);
-            await refreshMembers();
+            const list = await api.getCompanyMembers(company.id);
+            setMembers(list);
           }}
-          onRemoveMember={!['owner','admin'].includes(userRole) ? undefined : async (userId) => {
+          onRemoveMember={async (userId) => {
             await api.removeMember(company.id, userId);
-            await refreshMembers();
+            const list = await api.getCompanyMembers(company.id);
+            setMembers(list);
           }}
         />
       )}

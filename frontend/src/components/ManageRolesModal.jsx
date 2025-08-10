@@ -10,7 +10,6 @@ export default function ManageRolesModal({
   onTransferOwnership,  // optional
   onRemoveMember,       // optional
   currentUserId,        // optional: to disable transfer to self
-  readOnly = false,     // NEW
 }) {
   const overlayRef = useRef(null);
 
@@ -52,7 +51,6 @@ export default function ManageRolesModal({
                 onTransferOwnership={onTransferOwnership}
                 onRemoveMember={onRemoveMember}
                 currentUserId={currentUserId}
-                readOnly={readOnly}
               />
             ))}
           </ul>
@@ -77,7 +75,6 @@ function MemberRow({
   onTransferOwnership,
   onRemoveMember,
   currentUserId,
-  readOnly = false,
 }) {
   const btnRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -129,77 +126,75 @@ function MemberRow({
         <span className="text-xs px-2 py-1 rounded-full bg-gray-100 border">
           {member.role}
         </span>
-        {/* Only show actions if not readOnly */}
-        {!readOnly && (
+
+        {/* 3-dot menu */}
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={() => {
+            const r = btnRef.current.getBoundingClientRect();
+            setMenuPos({
+              top: r.bottom + 6,
+              left: r.right - 224,
+              width: 224,
+            });
+            setMenuOpen((v) => !v);
+          }}
+          className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <svg
+            className="w-5 h-5"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M10 6.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
+          </svg>
+        </button>
+
+        {menuOpen && (
           <>
-            <button
-              ref={btnRef}
-              type="button"
-              onClick={() => {
-                const r = btnRef.current.getBoundingClientRect();
-                setMenuPos({
-                  top: r.bottom + 6,
-                  left: r.right - 224,
-                  width: 224,
-                });
-                setMenuOpen((v) => !v);
-              }}
-              className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
+            {/* click-away layer */}
+            <div
+              className="fixed inset-0 z-[999]"
+              onMouseDown={() => setMenuOpen(false)}
+            />
+            {/* the menu */}
+            <div
+              role="menu"
+              className="fixed z-[1000] rounded-xl border bg-white shadow-xl p-1"
+              style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
             >
-              <svg
-                className="w-5 h-5"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path d="M10 6.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
-              </svg>
-            </button>
-            {menuOpen && (
-              <>
-                {/* click-away layer */}
-                <div
-                  className="fixed inset-0 z-[999]"
-                  onMouseDown={() => setMenuOpen(false)}
-                />
-                {/* the menu */}
-                <div
-                  role="menu"
-                  className="fixed z-[1000] rounded-xl border bg-white shadow-xl p-1"
-                  style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+              <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-500">
+                Change role
+              </div>
+              {ROLE_OPTIONS.map((r) => (
+                <MenuItem
+                  key={r}
+                  onClick={() => doChangeRole(r)}
+                  disabled={member.role === "owner" && r !== "owner"}
+                  selected={member.role === r}
                 >
-                  <div className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-500">
-                    Change role
-                  </div>
-                  {ROLE_OPTIONS.map((r) => (
-                    <MenuItem
-                      key={r}
-                      onClick={() => doChangeRole(r)}
-                      disabled={member.role === "owner" && r !== "owner"}
-                      selected={member.role === r}
-                    >
-                      {member.role === r ? "✓ " : ""}
-                      {r}
-                    </MenuItem>
-                  ))}
-                  <div className="my-1 border-t" />
-                  <MenuItem
-                    onClick={doTransfer}
-                    disabled={!onTransferOwnership || isSelf || isOwner}
-                  >
-                    Transfer ownership
-                  </MenuItem>
-                  <MenuItem
-                    onClick={doRemove}
-                    disabled={!onRemoveMember || isOwner}
-                  >
-                    Remove from company
-                  </MenuItem>
-                </div>
-              </>
-            )}
+                  {member.role === r ? "✓ " : ""}
+                  {r}
+                </MenuItem>
+              ))}
+              <div className="my-1 border-t" />
+              <MenuItem
+                onClick={doTransfer}
+                disabled={!onTransferOwnership || isSelf || isOwner}
+              >
+                Transfer ownership
+              </MenuItem>
+              <MenuItem
+                onClick={doRemove}
+                disabled={!onRemoveMember || isOwner}
+              >
+                Remove from company
+              </MenuItem>
+            </div>
           </>
         )}
       </div>
