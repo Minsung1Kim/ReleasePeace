@@ -147,6 +147,7 @@ function ActivityBell({ authedFetch }) {
   );
 }
 import ManageRolesModal from "./ManageRolesModal";
+import TeamViewerModal from "./TeamViewerModal";
 import * as api from '../utils/api';
 import { config } from '../config'
 
@@ -166,8 +167,9 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   const [activeEnvironment, setActiveEnvironment] = useState('production')
   const [showCreateFlag, setShowCreateFlag] = useState(false)
   // New state for roles modal
-  const [rolesOpen, setRolesOpen] = useState(false);
-  const [members, setMembers] = useState([]);
+  const [rolesOpen, setRolesOpen] = useState(false);   // manage roles (owner/admin)
+  const [teamOpen, setTeamOpen]   = useState(false);   // read-only (everyone else)
+  const [members, setMembers]     = useState([]);      // list for both modals
   // Recent activity state
   const [recent, setRecent] = useState([]);
   const [recentLoading, setRecentLoading] = useState(false);
@@ -243,14 +245,24 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     }
   }
 
+  // Helpers for member modals
   async function refreshMembers() {
-    const list = await api.getCompanyMembers(company.id);
-    setMembers(list);
+    try {
+      const list = await api.getCompanyMembers(company.id);
+      setMembers(list || []);
+    } catch (e) {
+      console.error('load members failed', e);
+    }
   }
 
   async function openRoles() {
     await refreshMembers();
     setRolesOpen(true);
+  }
+
+  async function openTeam() {
+    await refreshMembers();
+    setTeamOpen(true);
   }
 
   // Always use a fresh Firebase ID token and retry once on 401
@@ -299,6 +311,27 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
   const userRole = company?.role || 'member'
   const canCreate = ['owner','admin','pm'].includes(userRole)
   const canToggle = ['owner','admin','pm','engineer'].includes(userRole)
+
+  // Poll for role changes and sync header
+  useEffect(() => {
+    let timer;
+    const syncRole = async () => {
+      try {
+        const resp = await api.companies.getMine(); // returns { success, companies }
+        const list = resp?.companies || [];
+        const latest = list.find(c => c.id === (company?.id));
+        if (latest && latest.role && latest.role !== company?.role) {
+          localStorage.setItem('releasepeace_company', JSON.stringify(latest));
+          window.location.reload();
+        }
+      } catch (e) {
+        // swallow
+      }
+    };
+    syncRole();
+    timer = setInterval(syncRole, 30000);
+    return () => clearInterval(timer);
+  }, [company?.id]);
 
  
 
@@ -497,13 +530,18 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               {/* NEW: compact recent activity */}
               <ActivityBell authedFetch={authedFetch} />
 
-              {company?.role === 'owner' && (
+              {/* Use correct button based on role */}
+              {['owner','admin'].includes(company?.role) ? (
                 <>
                   <InviteCodePopover companyId={company.id} companyName={company.name} />
                   <button onClick={openRoles} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Manage Roles
                   </button>
                 </>
+              ) : (
+                <button onClick={openTeam} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                  Team
+                </button>
               )}
               {/* Approvals button for eligible roles */}
               {['qa','legal','owner','admin'].includes(user.role) && (
@@ -759,19 +797,24 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
           onClose={() => setRolesOpen(false)}
           onChangeRole={async (userId, role) => {
             await api.updateMemberRole(company.id, userId, role);
-            const list = await api.getCompanyMembers(company.id);
-            setMembers(list);
+            await refreshMembers(); // keep modal updated
           }}
           onTransferOwnership={async (userId) => {
             await api.transferOwnership(company.id, userId);
-            const list = await api.getCompanyMembers(company.id);
-            setMembers(list);
+            await refreshMembers();
+            window.location.reload(); // owner changed -> refresh header quickly
           }}
           onRemoveMember={async (userId) => {
             await api.removeMember(company.id, userId);
-            const list = await api.getCompanyMembers(company.id);
-            setMembers(list);
+            await refreshMembers();
           }}
+        />
+      )}
+
+      {teamOpen && (
+        <TeamViewerModal
+          members={members}
+          onClose={() => setTeamOpen(false)}
         />
       )}
 
