@@ -1,5 +1,6 @@
 const express = require('express');
 const { createApproval, listForFlag, addDecision } = require('../services/approvalService');
+const { authMiddleware } = require('../middleware/auth');
 const { logAudit } = (() => {
   try { return require('../services/auditService'); } 
   catch { return { logAudit: async () => {} }; }
@@ -8,7 +9,7 @@ const { logAudit } = (() => {
 const router = express.Router();
 
 // POST /api/flags/:flagKey/approvals  -> request approval(s)
-router.post('/flags/:flagKey/approvals', async (req, res) => {
+router.post('/flags/:flagKey/approvals', authMiddleware, async (req, res) => {
   try {
     const { flagKey } = req.params;
     const { requiredRoles = ['QA','LEGAL'], requiredCount = 1 } = req.body || {};
@@ -26,13 +27,13 @@ router.post('/flags/:flagKey/approvals', async (req, res) => {
 });
 
 // GET /api/flags/:flagKey/approvals -> list approvals for a flag
-router.get('/flags/:flagKey/approvals', async (req, res) => {
+router.get('/flags/:flagKey/approvals', authMiddleware, async (req, res) => {
   const { flagKey } = req.params;
   res.json(await listForFlag(flagKey));
 });
 
 // POST /api/approvals/:id/decision { decision:'approve'|'reject', role, comment }
-router.post('/approvals/:id/decision', async (req, res) => {
+router.post('/approvals/:id/decision', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { decision, role, comment } = req.body || {};
   if (!['approve','reject'].includes(String(decision))) return res.status(400).json({ error:'invalid_decision' });

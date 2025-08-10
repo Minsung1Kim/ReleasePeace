@@ -1,4 +1,4 @@
-const db = require('../database/db');
+const db = require('../utils/db');
 
 async function logAudit({ actorId, action, entityType, entityId, payload = {} }) {
   await db.query(

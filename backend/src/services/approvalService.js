@@ -1,4 +1,4 @@
-const db = require('../database/db');
+const db = require('../utils/db');
 
 async function createApproval({ flagKey, requestedBy, requiredRoles = ['QA','LEGAL'], requiredCount = 1 }) {
   const q = `
