@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const NodeCache = require('node-cache');
 require('dotenv').config();
 
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -19,6 +20,30 @@ console.log('🌍 Environment:', process.env.NODE_ENV || 'development');
 // Initialize cache for flag evaluations
 const flagCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
 
+// --- CORS Middleware (static + env-driven allowlist) ---
+const STATIC_ALLOWED = [
+  'https://release-peace.vercel.app',
+  'https://releasepeace-frontend.vercel.app',
+];
+const ENV_ALLOWED = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+const ALLOWED = [...STATIC_ALLOWED, ...ENV_ALLOWED].filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, cb) => {
+    if (!origin || ALLOWED.includes(origin)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-ID'],
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // handle preflight globally
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -29,18 +54,6 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:"],
     },
   },
-}));
-
-// CORS - Production frontend only
-app.use(cors({
-  origin: [
-    'https://release-peace.vercel.app',
-    'https://releasepeace-frontend.vercel.app',
-    process.env.FRONTEND_URL
-  ].filter(Boolean),
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-ID']
 }));
 
 // Logging
