@@ -10,6 +10,10 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Mount approvals router
+const approvalsRouter = require('./routes/approvals');
+app.use('/api', approvalsRouter);
+
 // Trust Railway's proxy
 app.set('trust proxy', 1);
 

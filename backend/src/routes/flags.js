@@ -3,6 +3,11 @@ const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
+const { requireApprovalIfRisky } = require('../middleware/requireApproval');
+const { logAudit } = (() => {
+  try { return require('../services/auditService'); }
+  catch { return { logAudit: async () => {} }; }
+})();
 
 const { FeatureFlag, FlagState, FlagApproval, AuditLog, User } = require('../models');
 const { Op } = require('sequelize');
@@ -228,10 +233,11 @@ router.put(
   authMiddleware,
   extractCompanyContext,
   requireRole(['owner', 'pm', 'engineer']),
+  requireApprovalIfRisky,
   async (req, res) => {
     try {
       const { flagId, environment } = req.params;
-      const { is_enabled, rollout_percentage, targeting_rules, reason } = req.body || {};
+      const { is_enabled, rollout_percentage, targeting_rules, reason, risk } = req.body || {};
 
       const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
       if (!flag) return res.status(404).json({ error: 'Flag not found' });
@@ -285,6 +291,16 @@ router.put(
         reason: reason || '',
         environment,
         req
+      });
+
+      // AuditService log
+      const actorId = req.user?.id || req.user?.email || 'unknown';
+      await logAudit({
+        actorId,
+        action: nextEnabled ? 'FLAG_TOGGLED_ON' : 'FLAG_TOGGLED_OFF',
+        entityType: 'flag',
+        entityId: flagId,
+        payload: { newState: nextEnabled ? 'on' : 'off', risk: risk || flag.risk_level || null }
       });
 
       res.json({ success: true, flag_state: state });

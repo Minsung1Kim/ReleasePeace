@@ -148,6 +148,8 @@ function ActivityBell({ authedFetch }) {
 }
 import ManageRolesModal from "./ManageRolesModal";
 import TeamViewerModal from "./TeamViewerModal";
+import ApprovalBadge from './ApprovalBadge';
+import ApprovalsPanel from './ApprovalsPanel';
 import * as api from '../utils/api';
 import { config } from '../config'
 
@@ -667,7 +669,6 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               {flags.map((flag) => {
                 const envStats = getEnvironmentStats(flag)
                 const currentEnvState = flag.states?.find(s => s.environment === activeEnvironment)
-                
                 return (
                   <div key={flag.id} className="p-6 hover:bg-[var(--rp-accent)] transition">
                     <div className="flex justify-between items-start">
@@ -700,6 +701,8 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                           Created by {flag.creator?.display_name || flag.creator?.username || 'Unknown'} • 
                           {envStats.enabled}/{envStats.total} environments enabled
                         </div>
+                        {/* ApprovalBadge under actions row */}
+                        <ApprovalBadge flagKey={flag.key || flag.id} token={token} />
                       </div>
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">
@@ -854,6 +857,13 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               </ul>
             )}
           </div>
+        </div>
+      )}
+
+      {/* QA ApprovalsPanel (bottom of dashboard) */}
+      {user?.roles?.includes?.('QA') && (
+        <div style={{ marginTop: 16 }}>
+          <ApprovalsPanel token={token} role="QA" />
         </div>
       )}
 
