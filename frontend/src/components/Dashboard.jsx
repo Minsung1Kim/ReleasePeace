@@ -580,10 +580,10 @@ function Dashboard({
                   </button>
                   <button
                     type="button"
-                    onClick={openManageRoles}
+                    onClick={() => setShowManageRoles(true)}
                     disabled={!company?.id}
                     className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  > 
+                  >
                     Manage Roles
                   </button>
                 </>
@@ -852,13 +852,13 @@ function Dashboard({
       )}
 
       {/* Manage Roles modal */}
-      {showManageRoles && (
-        <ManageRolesModal
+      {showTeam && (
+        <TeamViewerModal
           open
-          companyId={company?.id}
-          members={members}
-          onRoleChange={handleRoleChange}
-          onClose={() => setShowManageRoles(false)}
+          companyId={companyId}
+          loading={teamLoading || inviteLoading}
+          error={teamError || inviteError}
+          onClose={() => { setShowTeam(false); setTeamError(''); setInviteError(''); }}
         />
       )}
 
