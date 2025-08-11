@@ -3,11 +3,8 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 
-// Defensive import for authMiddleware
-const authModule = require('../middleware/auth.js');
-const authMiddleware = authModule && typeof authModule.authMiddleware === 'function'
-  ? authModule.authMiddleware
-  : (() => { throw new Error('authMiddleware is not exported from middleware/auth.js'); })();
+
+const { requireAuth } = require('../middleware/auth');
 
 const {
   extractCompanyContext,
@@ -213,7 +210,7 @@ router.post('/:companyId/regenerate-invite',
    MEMBERSHIP MANAGEMENT
 ---------------------------- */
 
-// List members
+// List members (owner/admins get full detail, others get minimal)
 router.get(
   '/:companyId/members',
   requireAuth,
@@ -221,9 +218,32 @@ router.get(
   async (req, res, next) => {
     try {
       const full = ['owner','admin'].includes(String(req.membership.role).toLowerCase());
-      // getMembers should be implemented on Company model
       const members = await req.company.getMembers?.({ full });
       res.json({ members });
+    } catch (e) { next(e); }
+  }
+);
+
+// Invite code (fetch) – allow owners/admins to view
+router.get(
+  '/:companyId/invite-code',
+  requireAuth,
+  requireCompanyMembership,
+  requireRole(['owner','admin']),
+  (req, res) => res.json({ invite_code: req.company.invite_code })
+);
+
+// Invite code (regenerate) – owner only
+router.post(
+  '/:companyId/invite-code',
+  requireAuth,
+  requireCompanyMembership,
+  requireRole(['owner']),
+  async (req, res, next) => {
+    try {
+      req.company.invite_code = genCode();
+      await req.company.save();
+      res.json({ invite_code: req.company.invite_code });
     } catch (e) { next(e); }
   }
 );

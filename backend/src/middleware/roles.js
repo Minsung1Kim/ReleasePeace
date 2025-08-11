@@ -17,15 +17,16 @@ async function getUserRoleInCompany(userId, companyId) {
  * Needs req.user (authMiddleware) and req.company (extractCompanyContext) or X-Company-ID header.
  */
 // normalize and accept arrays
-function requireRole(required) {
-  const need = (Array.isArray(required) ? required : [required]).map(r => String(r).toLowerCase());
+const requireRole = (allowed) => {
+  const allow = new Set(Array.isArray(allowed) ? allowed : [allowed]);
   return (req, res, next) => {
-    // Always check membership for company-scoped routes
-    const role = String(req.membership?.role || '').toLowerCase();
-    if (!role) return res.status(403).json({ error: 'Not a member' });
-    if (!need.includes(role)) return res.status(403).json({ error: 'Insufficient role', role });
+    const role = req.membership?.role || req.userRole || req.user?.role;
+    if (!role) return res.status(403).json({ error: 'Insufficient role', message: 'No role on request' });
+    if (!allow.has(role) && !allow.has('any')) {
+      return res.status(403).json({ error: 'Insufficient role' });
+    }
     next();
   };
-}
+};
 
 module.exports = { requireRole, getUserRoleInCompany }

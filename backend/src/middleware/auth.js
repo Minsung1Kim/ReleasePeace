@@ -141,4 +141,9 @@ const requireRole = (roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { authMiddleware, optionalAuth, requireRole };
+module.exports = {
+  authMiddleware,
+  optionalAuth,
+  // Alias for consistency across routes
+  requireAuth: authMiddleware,
+};

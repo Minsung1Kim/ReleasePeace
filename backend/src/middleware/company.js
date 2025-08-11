@@ -79,7 +79,12 @@ const requireCompanyMembership = async (req, res, next) => {
     if (!membership) return res.status(403).json({ error: 'Not a member of this company' });
 
     req.company = company;
-    req.membership = membership;
+    req.membership = membership || null;
+    req.userRole = membership?.role || null;
+    console.debug('membership', { userId: req.user?.id, role: req.membership?.role, companyId: req.company?.id });
+    if (!req.company || !req.membership || !req.userRole) {
+      return res.status(403).json({ error: 'not a member of this company' });
+    }
     next();
   } catch (err) {
     next(err);
