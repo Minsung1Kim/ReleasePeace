@@ -9,9 +9,7 @@ export async function getMembers(companyId) {
     if (!id) id = localStorage.getItem('rp_company_id') || undefined;
   }
   if (!id) throw new ApiError('No company selected', 400);
-  return apiRequest(`/api/companies/${id}/members`, {
-    headers: { 'X-Company-Id': id }
-  });
+  return apiRequest(`/api/companies/${id}/members`, { headers: { 'X-Company-Id': id } });
 }
 
 import { config } from '../config';
@@ -57,7 +55,19 @@ export async function apiRequest(endpoint, { method = 'GET', body, headers = {},
     if (stored) token = stored;
   }
 
-  // find a company id automatically
+  // Inject X-Company-Id if missing
+  const ensureCompanyHeader = (headers = {}) => {
+    let id = headers['X-Company-Id'] || headers['x-company-id'];
+    if (!id) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
+        id = saved?.id;
+      } catch {}
+      if (!id) id = localStorage.getItem('rp_company_id') || undefined;
+    }
+    return id ? { ...headers, 'X-Company-Id': id } : headers;
+  };
+
   const companyIdFromLocal =
     headers['X-Company-Id'] ||
     headers['x-company-id'] ||
@@ -67,12 +77,11 @@ export async function apiRequest(endpoint, { method = 'GET', body, headers = {},
 
   const init = {
     method,
-    headers: {
+    headers: ensureCompanyHeader({
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(companyIdFromLocal ? { 'X-Company-Id': companyIdFromLocal } : {}),
       ...headers, // caller can still override
-    },
+    }),
     credentials: 'include',
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     ...(signal ? { signal } : {}),

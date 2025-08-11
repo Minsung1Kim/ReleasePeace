@@ -158,12 +158,30 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   // --- State ---
   // local state that can change when user switches companies
   const [activeCompany, setActiveCompany] = useState(companyProp || null);
-  // Hydrate company from localStorage once on mount
+  // Hydrate company from localStorage or API once on mount
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
-      if (saved?.id) setActiveCompany(saved);
-    } catch {}
+    (async () => {
+      // 1) from localStorage
+      try {
+        const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
+        if (saved?.id) {
+          setActiveCompany(saved);
+          return;
+        }
+      } catch {}
+      // 2) fall back to API
+      try {
+        const mine = await companies.getMine(); // your existing api helper
+        const chosen = Array.isArray(mine) ? mine[0] : mine?.company || null;
+        if (chosen?.id) {
+          setActiveCompany(chosen);
+          localStorage.setItem('rp_company_id', chosen.id);
+          localStorage.setItem('releasepeace_company', JSON.stringify(chosen));
+        }
+      } catch (e) {
+        console.warn('hydrate company failed', e);
+      }
+    })();
   }, []);
   // 🔧 alias for legacy references scattered in JSX/handlers
   const company = activeCompany || companyProp || null;
@@ -182,7 +200,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     setActiveCompany(next);
     if (next?.id) {
       localStorage.setItem('rp_company_id', next.id);
-      localStorage.setItem('releasepeace_company', JSON.stringify(next));
+      localStorage.setItem('releasepeace_company', JSON.stringify(next)); // keep both in sync
     }
     if (typeof onSwitchCompany === 'function') onSwitchCompany(next);
   }
@@ -290,16 +308,25 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   }
 
   async function openTeam() {
+    // resolve id from state -> releasepeace_company -> rp_company_id
+    let id = company?.id;
+    if (!id) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
+        id = saved?.id;
+      } catch {}
+      if (!id) id = localStorage.getItem('rp_company_id') || undefined;
+    }
+    if (!id) {
+      // show a small toast/snackbar in your UI; for now just bail gracefully
+      console.warn('Select or create a company first');
+      return;
+    }
+    setTeamOpen(true);
     try {
-      const list = await getMembers(company?.id);
-      setMembers(list || []);
-      setTeamOpen(true);
+      const list = await getMembers(id);
+      setMembers(list?.members || list?.items || list || []);
     } catch (e) {
-      if (e?.message === 'No company selected') {
-        // show a toast or modal
-        console.warn('No company selected');
-        return;
-      }
       console.error('load members failed', e);
     }
   }
