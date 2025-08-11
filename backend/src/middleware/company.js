@@ -1,3 +1,20 @@
+function resolveCompanyId(req) {
+  return (
+    req.headers['x-company-id'] ||
+    req.params?.companyId || req.params?.id ||  // ✅ accept path /companies/:companyId/*
+    req.companyId ||
+    req.company?.id
+  );
+}
+
+exports.requireCompanyContext = (req, res, next) => {
+  const id = resolveCompanyId(req);
+  if (!id) return res.status(400).json({ error: 'Missing companyId' });
+  req.companyId = id;
+  next();
+};
+
+exports.resolveCompanyId = resolveCompanyId;
 // backend/src/middleware/company.js - COMPLETE FILE
 const { Company } = require('../models');
 const logger = (() => { try { return require('../utils/logger'); } catch { return console; } })();

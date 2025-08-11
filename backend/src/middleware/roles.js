@@ -1,5 +1,6 @@
 // backend/src/middleware/roles.js
 const { UserCompany } = require('../models')
+const { resolveCompanyId } = require('./company');
 
 async function getUserRoleInCompany(userId, companyId) {
   if (!userId || !companyId) return null
@@ -19,13 +20,7 @@ function requireRole(...allowed) {
   const allowedFlat = allowed.flat().filter(Boolean).map(r => String(r).toLowerCase());
   return async (req, res, next) => {
     try {
-      const companyId = (
-        req.headers['x-company-id'] ||
-        req.params?.companyId ||          // ✅ allow /companies/:companyId/*
-        req.company?.id ||
-        req.companyId ||
-        req.companyID
-      );
+      const companyId = resolveCompanyId(req); // ✅ consistent resolver
       if (!companyId) {
         return res.status(400).json({ error: 'Missing companyId' });
       }

@@ -169,18 +169,16 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
           return;
         }
       } catch {}
-      // 2) fall back to API
+      // 2) API fallback
       try {
-        const mine = await companies.getMine(); // your existing api helper
+        const mine = await companies.getMine();
         const chosen = Array.isArray(mine) ? mine[0] : mine?.company || null;
         if (chosen?.id) {
           setActiveCompany(chosen);
           localStorage.setItem('rp_company_id', chosen.id);
-          localStorage.setItem('releasepeace_company', JSON.stringify(chosen));
+          localStorage.setItem('releasepeace_company', JSON.stringify(chosen)); // ✅
         }
-      } catch (e) {
-        console.warn('hydrate company failed', e);
-      }
+      } catch {}
     })();
   }, []);
   // 🔧 alias for legacy references scattered in JSX/handlers
@@ -200,7 +198,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     setActiveCompany(next);
     if (next?.id) {
       localStorage.setItem('rp_company_id', next.id);
-      localStorage.setItem('releasepeace_company', JSON.stringify(next)); // keep both in sync
+      localStorage.setItem('releasepeace_company', JSON.stringify(next)); // ✅
     }
     if (typeof onSwitchCompany === 'function') onSwitchCompany(next);
   }
@@ -308,7 +306,6 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   }
 
   async function openTeam() {
-    // resolve id from state -> releasepeace_company -> rp_company_id
     let id = company?.id;
     if (!id) {
       try {
@@ -317,14 +314,10 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       } catch {}
       if (!id) id = localStorage.getItem('rp_company_id') || undefined;
     }
-    if (!id) {
-      // show a small toast/snackbar in your UI; for now just bail gracefully
-      console.warn('Select or create a company first');
-      return;
-    }
+    if (!id) return console.warn('Select or create a company first.');
     setTeamOpen(true);
     try {
-      const list = await getMembers(id);
+      const list = await getMembers(id);   // your api helper
       setMembers(list?.members || list?.items || list || []);
     } catch (e) {
       console.error('load members failed', e);

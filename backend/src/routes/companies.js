@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const router = express.Router();
 
 const { authMiddleware } = require('../middleware/auth');
+const { requireCompanyContext } = require('../middleware/company');
 const { requireRole } = require('../middleware/roles');
 const { User, UserCompany, Company } = require('../models');
 const { Op, fn, col, where } = require('sequelize');
@@ -232,9 +233,11 @@ router.post('/:companyId/regenerate-invite',
 ---------------------------- */
 
 // List members
-router.get('/:companyId/members',
+router.get(
+  '/:companyId/members',
   authMiddleware,
-  requireRole('member', 'admin', 'owner'),
+  requireCompanyContext,     // ✅ sets req.companyId from header or URL
+  requireRole(['viewer','pm','admin','owner']),
   async (req, res, next) => {
     try {
       const { companyId } = req.params;
