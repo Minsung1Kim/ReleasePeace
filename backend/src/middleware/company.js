@@ -23,7 +23,35 @@ function requireCompanyContext(req, res, next) {
   next();
 }
 
-const { Company, UserCompany } = require('../models'); // <- change
+const { Company, UserCompany } = require('../models');
+
+exports.requireCompanyMembership = async (req, res, next) => {
+  try {
+    const companyId = req.params.companyId || req.get('X-Company-ID');
+    if (!companyId) return res.status(400).json({ error: 'Missing company id' });
+
+    const company = await Company.findByPk(companyId);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    const membership = await UserCompany.findOne({
+      where: { company_id: company.id, user_id: req.user.id, status: 'active' }
+    });
+    if (!membership) return res.status(403).json({ error: 'Not a member of this company' });
+
+    req.company = company;
+    req.membership = membership;
+    next();
+  } catch (err) { next(err); }
+};
+
+exports.requireCompanyAdmin = (req, res, next) => {
+  if (!req.membership) return res.status(403).json({ error: 'Not a member' });
+  if (!['owner', 'admin'].includes(req.membership.role)) {
+    return res.status(403).json({ error: 'Insufficient role' });
+  }
+  next();
+};
+
 const logger = (() => { try { return require('../utils/logger'); } catch { return console; } })();
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -71,26 +99,6 @@ async function extractCompanyContext(req, res, next) {
     logger.error('extractCompanyContext error:', e);
     return res.status(500).json({ error: 'Company context error' });
   }
-}
-
-exports.requireCompanyMembership = async (req, res, next) => {
-  try {
-    const companyId = req.params.companyId || req.get('X-Company-ID');
-    if (!companyId) return res.status(400).json({ error: 'Missing company id' });
-
-    const company = await Company.findByPk(companyId);
-    if (!company) return res.status(404).json({ error: 'Company not found' });
-
-    const membership = await UserCompany.findOne({ // <- use UserCompany
-      where: { company_id: company.id, user_id: req.user.id, status: 'active' }
-    });
-
-    if (!membership) return res.status(403).json({ error: 'Not a member of this company' });
-
-    req.company = company;
-    req.membership = membership;
-    next();
-  } catch (e) { next(e); }
 }
 
 // ✅ export everything
