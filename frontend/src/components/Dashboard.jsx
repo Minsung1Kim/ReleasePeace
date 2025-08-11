@@ -198,6 +198,7 @@ function Dashboard({
   // ---------- DERIVED VALUES ----------
   const company = activeCompany || companyProp || null;
   const effectiveRole = company?.role || user?.role || 'member';
+  const userRole = effectiveRole; // legacy alias to fix "userRole is not defined"
   const isOwnerOrAdmin = ['owner', 'admin'].includes(effectiveRole);
   const canCreate = ['owner','admin','pm'].includes(effectiveRole);
   const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
