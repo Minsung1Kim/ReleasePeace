@@ -1,10 +1,14 @@
 
 import { useEffect, useState, useRef } from "react";
-import { apiRequest } from '../utils/api';
+import { apiRequest, getMembers } from '../utils/api';
+
 
 const TeamViewerModal = ({ open, companyId, onClose, tab = 'members' }) => {
   const overlayRef = useRef(null);
   const [code, setCode] = useState('');
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (!open || !companyId || tab !== 'invite') return;
@@ -14,6 +18,23 @@ const TeamViewerModal = ({ open, companyId, onClose, tab = 'members' }) => {
       .then(r => setCode(r.invite_code || r.inviteCode || ''))
       .catch(console.error);
   }, [open, companyId, tab]);
+
+  useEffect(() => {
+    if (tab !== 'members' || !companyId) return;
+    let alive = true;
+    (async () => {
+      setLoading(true); setError('');
+      try {
+        const list = await getMembers(companyId);
+        if (alive) setMembers(Array.isArray(list?.members) ? list.members : (list || []));
+      } catch (e) {
+        if (alive) setError(e.message || 'Failed to load members');
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [tab, companyId]);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose?.();
@@ -67,16 +88,33 @@ const TeamViewerModal = ({ open, companyId, onClose, tab = 'members' }) => {
           </>
         )}
 
-        {/* Members Section (placeholder) */}
+        {/* Members Section */}
         {tab === 'members' && (
           <>
             <div className="p-4 border-b">
               <h2 className="text-lg font-semibold">Team Members</h2>
-              <p className="text-xs text-gray-500 mt-1">List of team members will appear here.</p>
             </div>
             <div className="p-4">
-              {/* TODO: Render actual members list here */}
-              <div className="text-gray-500">Members view coming soon.</div>
+              {loading && <div className="text-sm text-gray-500 p-3">Loading…</div>}
+              {error && <div className="text-sm text-red-600 p-3">{error}</div>}
+              {!loading && !error && members.length === 0 && (
+                <div className="text-sm text-gray-500 p-3">No members yet.</div>
+              )}
+              {!loading && !error && members.length > 0 && (
+                <ul className="divide-y">
+                  {members.map(m => (
+                    <li key={m.id} className="py-2 flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">
+                          {m.display_name || m.username || m.email}
+                        </div>
+                        <div className="text-xs text-gray-500">{m.role}</div>
+                      </div>
+                      {/* (optional) role actions if owner/admin */}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </>
         )}

@@ -197,11 +197,13 @@ function Dashboard({
 
   // ---------- DERIVED VALUES ----------
   const company = activeCompany || companyProp || null;
-  const effectiveRole = company?.role || user?.role || 'member';
+  const stored = (() => { try { return JSON.parse(localStorage.getItem('releasepeace_company')) || null } catch { return null } })();
+  const effectiveRole = company?.role || stored?.role || user?.role || 'member';
   const userRole = effectiveRole; // legacy alias to fix "userRole is not defined"
   const isOwnerOrAdmin = ['owner', 'admin'].includes(effectiveRole);
   const canCreate = ['owner','admin','pm'].includes(effectiveRole);
   const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
+  const canInvite = effectiveRole === 'owner' || effectiveRole === 'admin';
   const environments = ['development', 'staging', 'production'];
   // Invite and Manage Roles handlers
   const openInvite = () => setShowInvite(true);
@@ -284,16 +286,23 @@ function Dashboard({
     try {
       // who am I a member of?
       const mine = await authedFetch('/api/companies/mine');   // returns company / companies / membership
-      const base = normalizeCompany(mine);
-      if (!base?.id) return;
+      let normalized;
+      if (mine?.company) {
+        normalized = { ...mine.company, role: mine.role };
+      } else {
+        normalized = mine;
+      }
+      if (!normalized?.id) return;
 
       // fetch full company details (name, plan, role, members, etc.)
-      const full = await authedFetch(`/api/companies/${base.id}`);
-      const c = normalizeCompany(full) || base;
+      const full = await authedFetch(`/api/companies/${normalized.id}`);
+      const c = normalizeCompany(full) || normalized;
 
       setActiveCompany(c);
-      localStorage.setItem('rp_company_id', c.id);
-      localStorage.setItem('releasepeace_company', JSON.stringify(c));
+      if (c?.id) {
+        localStorage.setItem('releasepeace_company', JSON.stringify(c));
+        localStorage.setItem('rp_company_id', c.id);
+      }
     } catch (e) {
       console.warn('loadActiveCompany failed', e);
     }
@@ -568,26 +577,18 @@ function Dashboard({
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
               <ActivityBell authedFetch={authedFetch} />
 
-              {['owner','admin'].includes(company?.role) ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => { setShowInvite(true); setShowTeam(false); }}
-                    disabled={!company?.id}
-                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  >
-                    Invite
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowManageRoles(true)}
-                    disabled={!company?.id}
-                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  >
-                    Manage Roles
-                  </button>
-                </>
-              ) : (
+              {canInvite && (
+                <button
+                  type="button"
+                  onClick={() => { setShowInvite(true); setShowTeam(false); }}
+                  disabled={!company?.id}
+                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                >
+                  Invite
+                </button>
+              )}
+              {/* Team button always available for non-owners/admins */}
+              {!canInvite && (
                 <button
                   onClick={() => { setShowTeam(true); setShowInvite(false); }}
                   disabled={!company?.id}
