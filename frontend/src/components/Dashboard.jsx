@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+// src/components/Dashboard.jsx
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getAuth, onIdTokenChanged } from 'firebase/auth';
-import { companies, getMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
+import { companies, getMembers } from '../utils/api';
 import * as api from '../utils/api';
 import { config } from '../config';
 import ManageRolesModal from './ManageRolesModal.jsx';
@@ -8,56 +9,7 @@ import TeamViewerModal from './TeamViewerModal.jsx';
 import ApprovalBadge from './ApprovalBadge';
 import ApprovalsPanel from './ApprovalsPanel';
 
-function InviteCodePopover({ companyId, companyName }) {
-  const [open, setOpen] = useState(false);
-  const [inviteCode, setInviteCode] = useState("");
-
-  async function loadInvite() {
-    const c = await companies.get(companyId);   // expects { invite_code }
-    setInviteCode((c.invite_code || "").trim());
-  }
-  async function regenerate() {
-    if (!confirm("Regenerate invite? Old links will stop working.")) return;
-    const updated = await companies.regenerateInvite(companyId); // { invite_code }
-    setInviteCode((updated.invite_code || "").trim());
-  }
-  async function copyCode() {
-    await navigator.clipboard.writeText(inviteCode);
-  }
-
-  return (
-    <div className="relative">
-      <button
-        className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-        onClick={async () => {
-          if (!open) await loadInvite();
-          setOpen(!open);
-        }}
-      >
-        Invite
-      </button>
-
-      {open && (
-        <div className="absolute right-0 mt-2 w-72 rounded-lg border bg-white shadow-lg p-3 z-50">
-          <div className="text-sm font-semibold mb-2">Invite to {companyName}</div>
-          <input readOnly value={inviteCode} className="invite-code-input w-full mb-2" />
-          <div className="flex gap-2">
-            <button onClick={copyCode} className="flex-1 border px-2 py-1 rounded text-xs hover:bg-gray-50">
-              Copy
-            </button>
-            <button onClick={regenerate} className="flex-1 border px-2 py-1 rounded text-xs text-red-600 hover:bg-red-50">
-              Regenerate code
-            </button>
-          </div>
-          <div className="mt-2 text-[11px] text-gray-500">
-            Share this code with a teammate. They can join via your app’s “Join company” screen.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-// Compact recent activity bell
+// ---------- Activity Bell ----------
 function ActivityBell({ authedFetch }) {
   const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -77,15 +29,15 @@ function ActivityBell({ authedFetch }) {
     return d.toLocaleDateString();
   };
 
-  async function load() {
+  const load = async () => {
     setLoading(true);
     try {
       const data = await authedFetch(`/api/flags/audit/recent?limit=10`);
-      setLogs(data.items || data.logs || []); // backend returns { items: [...] }
+      setLogs(data.items || data.logs || []);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => { if (open) load(); }, [open]);
 
@@ -111,7 +63,6 @@ function ActivityBell({ authedFetch }) {
         className="w-9 h-9 inline-flex items-center justify-center rounded-lg border hover:bg-gray-100"
         title="Recent activity"
       >
-        {/* bell icon */}
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm6-6V11a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2Z"/>
         </svg>
@@ -154,51 +105,20 @@ function ActivityBell({ authedFetch }) {
   );
 }
 
-const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSwitchCompany }) => {
-  // --- State ---
-  // local state that can change when user switches companies
+// ---------- Main Dashboard ----------
+function Dashboard({
+  user,
+  token,
+  getToken,
+  onLogout,
+  company: companyProp,
+  onSwitchCompany, // callback provided by parent
+}) {
+  // company state (+ alias so older code can use `company`)
   const [activeCompany, setActiveCompany] = useState(companyProp || null);
-  // Hydrate company from localStorage or API once on mount
-  useEffect(() => {
-    (async () => {
-      // 1) localStorage first (fast path)
-      const saved = safeJsonGet(localStorage.getItem('releasepeace_company'));
-      if (saved?.id) {
-        setActiveCompany(saved);
-        return;
-      }
-      // 2) server fallback
-      try {
-        const mine = await companies.getMine();
-        const chosen = Array.isArray(mine) ? mine[0] : mine?.company || null;
-        if (chosen?.id) {
-          setActiveCompany(chosen);
-          localStorage.setItem('releasepeace_company', JSON.stringify(chosen));
-          localStorage.setItem('rp_company_id', chosen.id);
-        }
-      } catch {}
-    })();
-  }, []);
-  // 🔧 alias for legacy references scattered in JSX/handlers
   const company = activeCompany || companyProp || null;
-  const [showInvite, setShowInvite] = useState(false);
-  const [showManageRoles, setShowManageRoles] = useState(false);
 
-  // keep local state in sync with the prop, and store for API headers
-  useEffect(() => {
-    setActiveCompany(companyProp || null);
-    if (companyProp?.id) localStorage.setItem('rp_company_id', companyProp.id);
-  }, [companyProp?.id]);
-
-  // used by your Switch Company UI (and any child needing a handler)
-  function handleSwitchCompany(next) {
-    setActiveCompany(next);
-    if (next?.id) {
-      localStorage.setItem('releasepeace_company', JSON.stringify(next));
-      localStorage.setItem('rp_company_id', next.id);
-    }
-    if (typeof onSwitchCompany === 'function') onSwitchCompany(next);
-  }
+  // persisted id helpers
   const companyPathParam = () => {
     const id = company?.id || '';
     const sub = company?.subdomain || '';
@@ -206,22 +126,136 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     return uuidRe.test(id) ? id : (sub || id);
   };
   const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
+
+  // fetch wrapper adds X-Company-Id automatically
+  const authedFetch = (path, opts = {}) => {
+    const id = company?.id || localStorage.getItem('rp_company_id') || undefined;
+    return api.apiRequest(path, {
+      ...opts,
+      headers: {
+        ...(opts.headers || {}),
+        ...(id ? { 'X-Company-Id': id } : {}),
+      },
+    });
+  };
+
+  const safeJsonGet = async (res) => { try { return await res.json(); } catch { return null; } };
+
+  // header/API status
   const [apiStatus, setApiStatus] = useState('checking...');
+
+  // flags
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [selectedFlag, setSelectedFlag] = useState(null);
   const [activeEnvironment, setActiveEnvironment] = useState('production');
   const [showCreateFlag, setShowCreateFlag] = useState(false);
-  // New state for roles modal
-  const [rolesOpen, setRolesOpen] = useState(false);   // manage roles (owner/admin)
-  const [teamOpen, setTeamOpen]   = useState(false);   // read-only (everyone else)
-  const [members, setMembers]     = useState([]);      // list for both modals
-  // Recent activity state
-  const [recent, setRecent] = useState([]);
+
+  // approvals & audit
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRows, setAuditRows] = useState([]);
+  const [auditForFlag, setAuditForFlag] = useState(null);
+
+  // team / roles modals
+  const [showTeam, setShowTeam] = useState(false);          // TeamViewerModal
+  const [manageRolesOpen, setManageRolesOpen] = useState(false); // ManageRolesModal
+  const [members, setMembers] = useState([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamError, setTeamError] = useState('');
+
+  // invite (we use TeamViewerModal for team/invite; keeping invite state in case your modal reads it)
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+
+  // recent list (top bell)
   const [recentLoading, setRecentLoading] = useState(false);
-  // Recent activity loader
-  async function loadRecent() {
+  const [recent, setRecent] = useState([]);
+
+  const userRole = company?.role || 'member';
+  const canCreate = ['owner','admin','pm'].includes(userRole);
+  const canToggle = ['owner','admin','pm','engineer'].includes(userRole);
+  const environments = ['development', 'staging', 'production'];
+
+  // ---------- boot & company sync ----------
+  useEffect(() => {
+    setActiveCompany(companyProp || null);
+    if (companyProp?.id) localStorage.setItem('rp_company_id', companyProp.id);
+  }, [companyProp?.id]);
+
+  // Keep Firebase fresh (avoid first-load 401)
+  useEffect(() => {
+    const auth = getAuth();
+    const unsub = onIdTokenChanged(auth, async (u) => { if (u) { try { await u.getIdToken(true); } catch {} } });
+    return unsub;
+  }, []);
+
+  // If user logs in and we don't have company, load mine
+  useEffect(() => {
+    const auth = getAuth();
+    const unsub = onIdTokenChanged(auth, async (u) => {
+      if (!u) return;
+      try { await u.getIdToken(true); } catch {}
+      try {
+        const mine = await companies.getMine();
+        setActiveCompany(mine);
+        if (mine?.id) {
+          localStorage.setItem('rp_company_id', mine.id);
+          localStorage.setItem('releasepeace_company', JSON.stringify(mine));
+        }
+      } catch (e) { /* ignore */ }
+    });
+    return unsub;
+  }, []);
+
+  // Poll role changes
+  useEffect(() => {
+    let timer;
+    const syncRole = async () => {
+      try {
+        const resp = await api.companies.getMine(); // { companies } or single
+        const list = resp?.companies || (resp ? [resp] : []);
+        const latest = list.find(c => c.id === company?.id);
+        if (latest && latest.role && latest.role !== company?.role) {
+          localStorage.setItem('releasepeace_company', JSON.stringify(latest));
+          window.location.reload();
+        }
+      } catch {}
+    };
+    syncRole();
+    timer = setInterval(syncRole, 30000);
+    return () => clearInterval(timer);
+  }, [company?.id]);
+
+  // health + initial data
+  useEffect(() => {
+    fetch(`${config.apiUrl}/health`)
+      .then(() => setApiStatus('✅ Connected!'))
+      .catch(() => setApiStatus('❌ Connection failed'));
+    fetchFlags();
+    loadRecent();
+    if (company?.id) localStorage.setItem('rp_company_id', company.id);
+  }, [company, token]);
+
+  // ---------- data loaders ----------
+  const fetchFlags = async () => {
+    try {
+      setLoading(true);
+      const data = await api.apiRequest('/api/flags', {
+        headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
+      });
+      setFlags(data.flags ?? data ?? []);
+    } catch (err) {
+      setError(err.message);
+      console.error('Failed to load flags:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadRecent = async () => {
     setRecentLoading(true);
     try {
       const audit = await api.apiRequest('/api/flags/audit/recent?limit=20', {
@@ -233,27 +267,18 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     } finally {
       setRecentLoading(false);
     }
-  }
+  };
 
-  // Approvals and Audit state
-  const [approvalsOpen, setApprovalsOpen] = useState(false);
-  const [pendingApprovals, setPendingApprovals] = useState([]);
-
-  const [auditOpen, setAuditOpen] = useState(false);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditRows, setAuditRows] = useState([]);
-  const [auditForFlag, setAuditForFlag] = useState(null);
-  // Approvals helpers
-  async function loadPendingApprovals() {
+  const loadPendingApprovals = async () => {
     try {
       const data = await authedFetch(`/api/flags/approvals/pending?limit=100`);
       setPendingApprovals(data.pending || []);
     } catch (e) {
       alert(e.message || 'Failed to load approvals');
     }
-  }
+  };
 
-  async function decideApproval(flagId, approvalId, status) {
+  const decideApproval = async (flagId, approvalId, status) => {
     const comments = window.prompt(`${status.toUpperCase()} — add a note (optional):`) || '';
     const data = await authedFetch(`/api/flags/${flagId}/approvals/${approvalId}`, {
       method: 'PATCH',
@@ -266,14 +291,14 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     }
     await loadPendingApprovals();
     alert(`Approval ${status}.`);
-  }
+  };
 
-  function openApprovals() {
+  const openApprovals = () => {
     loadPendingApprovals();
     setApprovalsOpen(true);
-  }
+  };
 
-  async function openAudit(flag) {
+  const openAudit = async (flag) => {
     setAuditForFlag(flag);
     setAuditOpen(true);
     setAuditLoading(true);
@@ -285,217 +310,61 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     } finally {
       setAuditLoading(false);
     }
-  }
+  };
 
-  // Helpers for member modals
-  async function refreshMembers() {
+  // ---------- team / invite / manage roles ----------
+  const refreshMembers = async () => {
     try {
       const list = await getMembers(company?.id);
       setMembers(list || []);
     } catch (e) {
       console.error('load members failed', e);
     }
-  }
+  };
 
-  async function openRoles() {
-    await refreshMembers();
-    setRolesOpen(true);
-  }
-
-  const handleOpenTeam = async () => {
-    let id = company?.id;
-    if (!id) {
-      const saved = safeJsonGet(localStorage.getItem('releasepeace_company'));
-      id = saved?.id || localStorage.getItem('rp_company_id');
+  const onOpenTeam = useCallback(async () => {
+    if (!company?.id) {
+      setTeamError('Select or create a company first.');
+      setShowTeam(true);
+      return;
     }
-    if (!id) return console.warn('Select or create a company first');
-
-    setTeamOpen(true);
+    setTeamError('');
+    setTeamLoading(true);
+    setShowTeam(true);
     try {
-      const list = await getMembers(id); // use hardened helper
+      const id = company?.id || localStorage.getItem('rp_company_id');
+      const list = await getMembers(id);
       setMembers(list?.members || list || []);
     } catch (e) {
-      setTeamOpen(false);
-      console.error('load members failed', e);
-    }
-  };
-
-  // Always parsed JSON, with X-Company-Id from state or localStorage
-  const authedFetch = (path, opts = {}) => {
-    const id = company?.id || localStorage.getItem('rp_company_id') || undefined;
-    return api.apiRequest(path, {
-      ...opts,
-      headers: {
-        ...(opts.headers || {}),
-        ...(id ? { 'X-Company-Id': id } : {}), // no 'demo' fallback
-      },
-    });
-  };
-  // Fetch company with members for modal
-  const fetchCompanyWithMembers = async () => {
-    try {
-      const res = await authedFetch(`/api/companies/${companyPathParam()}`);
-      const data = res;
-      if (data.success && data.company.members) {
-        setCompanyMembers(data.company.members);
-      }
-    } catch (err) {
-      console.error('Failed to fetch company members:', err);
-    }
-  } 
-  const userRole = company?.role || 'member'
-  const canCreate = ['owner','admin','pm'].includes(userRole)
-  const canToggle = ['owner','admin','pm','engineer'].includes(userRole)
-
-  // Poll for role changes and sync header
-  useEffect(() => {
-    let timer;
-    const syncRole = async () => {
-      try {
-        const resp = await api.companies.getMine(); // returns { success, companies }
-        const list = resp?.companies || [];
-        const latest = list.find(c => c.id === (company?.id));
-        if (latest && latest.role && latest.role !== company?.role) {
-          localStorage.setItem('releasepeace_company', JSON.stringify(latest));
-          window.location.reload();
-        }
-      } catch (e) {
-        // swallow
-      }
-    };
-    syncRole();
-    timer = setInterval(syncRole, 30000);
-    return () => clearInterval(timer);
-  }, [company?.id]);
-
-  // --- Token warmup + load company effect ---
-  useEffect(() => {
-    const auth = getAuth();
-    const unsub = onIdTokenChanged(auth, async (user) => {
-      if (user) {
-        try { await user.getIdToken(true); } catch {}
-        try {
-          const mine = await companies.getMine();
-          setActiveCompany(mine);
-          if (mine?.id) {
-            localStorage.setItem('rp_company_id', mine.id);
-            localStorage.setItem('releasepeace_company', JSON.stringify(mine));
-          }
-        } catch (e) { console.error('load company failed', e); }
-      }
-    });
-    return unsub;
-  }, []);
-
-  // Keep Firebase token fresh before first API calls (prevents initial 401)
-  useEffect(() => {
-    const auth = getAuth();
-    const unsub = onIdTokenChanged(auth, async (user) => {
-      if (user) {
-        try { await user.getIdToken(true); } catch {}
-      }
-    });
-    return unsub;
-  }, []);
-
-  // If you already have "company" state, this stores it for API headers
-  useEffect(() => {
-    try {
-      if (company?.id) localStorage.setItem('rp_company_id', company.id);
-    } catch {}
-  }, [company?.id]);
-
-  // If you DON'T already load the user's company, add this loader:
-  useEffect(() => {
-    let ran = false;
-    (async () => {
-      if (ran) return; ran = true;
-      try {
-        const mine = await companies.getMine();
-        if (mine?.id) {
-          setActiveCompany(mine);
-          localStorage.setItem('rp_company_id', mine.id);
-          localStorage.setItem('releasepeace_company', JSON.stringify(mine));
-        }
-      } catch (e) {
-        console.error('load company failed', e);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    // Test API connection
-    fetch(`${config.apiUrl}/health`)
-      .then(res => res)
-      .then(() => setApiStatus('✅ Connected!'))
-      .catch(() => setApiStatus('❌ Connection failed'));
-
-    // Fetch flags for this company
-    fetchFlags();
-    loadRecent();
-
-    // Store company id for API header auto-inclusion
-    if (company?.id) localStorage.setItem('rp_company_id', company.id);
-  }, [company, token])
-
-  const fetchFlags = async () => {
-    try {
-      setLoading(true)
-      const data = await api.apiRequest('/api/flags', {
-        headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
-      });
-      setFlags(data.flags ?? data ?? [])
-    } catch (err) {
-      setError(err.message)
-      console.error('Failed to load flags:', err)
+      setTeamError(e.message || 'Failed to load members.');
     } finally {
-      setLoading(false)
+      setTeamLoading(false);
     }
-  }
+  }, [company?.id]);
 
- // Add this function
-  
-  // Modal role change handler (soft update)
-  const handleRoleChange = async (userId, newRole) => {
-    try {
-      const res = await authedFetch(`/api/companies/${companyPathParam()}/users/${userId}/role`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ new_role: newRole })
-      })
+  const onOpenInvite = useCallback(async () => {
+    // If your TeamViewerModal has tabs, you can set an invite tab here with a ref/prop.
+    // We just open the same modal and let the user pick invite inside it.
+    setInviteError('');
+    setInviteLoading(false);
+    setShowTeam(true);
+  }, []);
 
-      const data = res
-      if (!data.success) throw new Error(data.error || 'Failed to update role')
-
-      // Soft update for now — could refetch company later
-      company.members = company.members.map(m => m.id === userId ? { ...m, role: newRole } : m)
-    } catch (err) {
-      alert(err.message)
-    }
-  }
-
+  // ---------- flags actions ----------
   const createFlag = async (flagData) => {
     try {
       const data = await authedFetch('/api/flags', {
         method: 'POST',
         body: flagData
       });
-
-      // accept either { success, flag } or just the flag
       const newFlag = data.flag || data;
-
       if (!data?.success && !newFlag?.id) {
         throw new Error(data?.message || 'Failed to create flag');
       }
-
-      // optimistic add (not required but makes UI snappy)
       if (newFlag?.id) {
         setFlags(prev => [newFlag, ...prev]);
       }
-
-      // ensure we’re in sync with server
       await fetchFlags();
-
       setShowCreateFlag(false);
     } catch (err) {
       console.error('Failed to create flag:', err);
@@ -525,12 +394,9 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         method: 'PUT',
         body: { is_enabled: enabling, reason }
       });
-
-      // server returns { error: 'Approval required' } with 403 → apiRequest would have thrown.
       if (!data.success) {
         throw new Error(data.message || 'Failed to update flag state');
       }
-
       await fetchFlags();
     } catch (err) {
       console.error('Failed to toggle flag:', err);
@@ -538,35 +404,35 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     }
   };
 
+  // ---------- helpers ----------
   const getRiskColor = (risk) => {
     switch (risk) {
-      case 'critical': return 'bg-red-100 text-red-800'
-      case 'high': return 'bg-orange-100 text-orange-800'
-      case 'medium': return 'bg-yellow-100 text-yellow-800'
-      case 'low': return 'bg-green-100 text-green-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'critical': return 'bg-red-100 text-red-800';
+      case 'high': return 'bg-orange-100 text-orange-800';
+      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'low': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
-  }
+  };
 
   const getTypeColor = (type) => {
     switch (type) {
-      case 'killswitch': return 'bg-red-100 text-red-800'
-      case 'experiment': return 'bg-purple-100 text-purple-800'
-      case 'rollout': return 'bg-blue-100 text-blue-800'
-      case 'permission': return 'bg-indigo-100 text-indigo-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'killswitch': return 'bg-red-100 text-red-800';
+      case 'experiment': return 'bg-purple-100 text-purple-800';
+      case 'rollout': return 'bg-blue-100 text-blue-800';
+      case 'permission': return 'bg-indigo-100 text-indigo-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
-  }
+  };
 
   const getEnvironmentStats = (flag) => {
-    const envs = flag.states || []
-    const enabled = envs.filter(s => s.is_enabled).length
-    const total = envs.length
-    return { enabled, total }
-  }
+    const envs = flag.states || [];
+    const enabled = envs.filter(s => s.is_enabled).length;
+    const total = envs.length;
+    return { enabled, total };
+  };
 
-  const environments = ['development', 'staging', 'production']
-
+  // ---------- render ----------
   return (
     <div className="min-h-screen bg-[var(--rp-bg)] text-[var(--rp-fg)]">
       {/* Header */}
@@ -589,28 +455,41 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                 </div>
               </div>
             </div>
+
             <div className="flex items-center space-x-4">
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
-              {/* NEW: compact recent activity */}
               <ActivityBell authedFetch={authedFetch} />
 
-              {/* Use correct button based on role */}
               {['owner','admin'].includes(company?.role) ? (
                 <>
-                  <button type="button" onClick={onOpenInvite} disabled={!company?.id || !['owner','admin'].includes(company?.role)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                  <button
+                    type="button"
+                    onClick={onOpenInvite}
+                    disabled={!company?.id}
+                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                  >
                     Invite
                   </button>
-                  <button type="button" onClick={showManageRoles ? undefined : onOpenTeam} disabled={!company?.id || !['owner','admin'].includes(company?.role)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                  <button
+                    type="button"
+                    onClick={() => setManageRolesOpen(true)}
+                    disabled={!company?.id}
+                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                  >
                     Manage Roles
                   </button>
                 </>
               ) : (
-                <button onClick={onOpenTeam} disabled={!company?.id} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                <button
+                  onClick={onOpenTeam}
+                  disabled={!company?.id}
+                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                >
                   Team
                 </button>
               )}
-              {/* Approvals button for eligible roles */}
-              {['qa','legal','owner','admin'].includes(user.role) && (
+
+              {['qa','legal','owner','admin'].includes(user?.role) && (
                 <button
                   onClick={openApprovals}
                   className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
@@ -620,14 +499,15 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
               )}
 
               <button
-                onClick={handleSwitchCompany}
+                onClick={() => onSwitchCompany?.()}
                 className="text-sm text-blue-600 hover:text-blue-500 px-3 py-1 border border-blue-200 rounded-md hover:bg-blue-50"
               >
                 Switch Company
               </button>
+
               <div className="text-sm text-gray-500 border-l pl-4">
-                <div className="font-medium">{user.display_name || user.username}</div>
-                <div className="text-xs">{user.role} • {company?.role}</div>
+                <div className="font-medium">{user?.display_name || user?.username}</div>
+                <div className="text-xs">{user?.role} • {company?.role}</div>
               </div>
               <button
                 onClick={onLogout}
@@ -664,7 +544,6 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
             <div className="text-sm text-gray-600">Environments</div>
           </div>
         </div>
-
 
         {/* Environment Selector */}
         <div className="rp-card p-4 mb-6">
@@ -711,7 +590,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
           <div className="px-6 py-4 border-b border-gray-200">
             <h2 className="text-xl font-semibold">Feature Flags ({flags.length})</h2>
           </div>
-          
+
           {loading ? (
             <div className="p-8 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -721,7 +600,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
             <div className="p-8 text-center">
               <div className="text-red-600 mb-2">⚠️ Error</div>
               <p className="text-gray-600">{error}</p>
-              <button 
+              <button
                 onClick={fetchFlags}
                 className="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
@@ -731,8 +610,8 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
           ) : flags.length > 0 ? (
             <div className="divide-y divide-gray-200">
               {flags.map((flag) => {
-                const envStats = getEnvironmentStats(flag)
-                const currentEnvState = flag.states?.find(s => s.environment === activeEnvironment)
+                const envStats = getEnvironmentStats(flag);
+                const currentEnvState = flag.states?.find(s => s.environment === activeEnvironment);
                 return (
                   <div key={flag.id} className="p-6 hover:bg-[var(--rp-accent)] transition">
                     <div className="flex justify-between items-start">
@@ -762,12 +641,12 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                           </div>
                         )}
                         <div className="text-xs text-gray-500">
-                          Created by {flag.creator?.display_name || flag.creator?.username || 'Unknown'} • 
-                          {envStats.enabled}/{envStats.total} environments enabled
+                          Created by {flag.creator?.display_name || flag.creator?.username || 'Unknown'} •
+                          {' '}{envStats.enabled}/{envStats.total} environments enabled
                         </div>
-                        {/* ApprovalBadge under actions row */}
                         <ApprovalBadge flagId={flag.id} companyId={company?.id} />
                       </div>
+
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">
                           {activeEnvironment.charAt(0).toUpperCase() + activeEnvironment.slice(1)} Environment
@@ -783,7 +662,6 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
-                              {/* Toggle button */}
                               <button
                                 onClick={() => canToggle
                                   ? toggleFlagState(flag.id, activeEnvironment, currentEnvState, flag)
@@ -794,7 +672,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                               >
                                 {currentEnvState.is_enabled ? 'Disable' : 'Enable'}
                               </button>
-                              {/* Rollback button for owner/pm */}
+
                               {['owner','pm'].includes(userRole) && (
                                 <button
                                   onClick={async () => {
@@ -806,7 +684,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                                         body: { reason: why }
                                       });
                                       const data = res;
-                                      if (!res.ok || !data.success) throw new Error(data.message || 'Rollback failed');
+                                      if (!data?.success) throw new Error(data?.message || 'Rollback failed');
                                       await fetchFlags();
                                       alert('Rollback completed.');
                                     } catch (e) {
@@ -819,7 +697,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                                   Rollback
                                 </button>
                               )}
-                              {/* History button */}
+
                               <button
                                 onClick={() => openAudit(flag)}
                                 className="px-3 py-1 rounded text-xs font-medium border ml-2 hover:bg-gray-100"
@@ -835,7 +713,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                       </div>
                     </div>
                   </div>
-                )
+                );
               })}
             </div>
           ) : (
@@ -854,22 +732,25 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
             </div>
           )}
         </div>
-
       </div>
-      {/* New Invite Modal */}
-      {showInvite && (
+
+      {/* Team / Invite modal (single modal handles both in your project) */}
+      {showTeam && (
         <TeamViewerModal
           open
           companyId={companyId}
-          onClose={() => setShowInvite(false)}
+          loading={teamLoading || inviteLoading}
+          error={teamError || inviteError}
+          onClose={() => { setShowTeam(false); setTeamError(''); setInviteError(''); }}
         />
       )}
 
-      {showManageRoles && (
+      {/* Manage Roles modal */}
+      {manageRolesOpen && (
         <ManageRolesModal
           open
           companyId={companyId}
-          onClose={() => setShowManageRoles(false)}
+          onClose={() => setManageRolesOpen(false)}
         />
       )}
 
@@ -919,7 +800,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         </div>
       )}
 
-      {/* Audit Log Drawer */}
+      {/* Audit Drawer */}
       {auditOpen && (
         <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setAuditOpen(false)}>
           <div className="absolute right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl p-4" onClick={e => e.stopPropagation()}>
@@ -951,10 +832,10 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         </div>
       )}
     </div>
-  )
+  );
 }
 
-// Create Flag Modal Component
+// ---------- Create Flag Modal ----------
 const CreateFlagModal = ({ onClose, onCreate }) => {
   const [formData, setFormData] = useState({
     name: '',
@@ -963,21 +844,19 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
     risk_level: 'medium',
     tags: '',
     requires_approval: false
-  })
-  const [loading, setLoading] = useState(false)
+  });
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
-    const flagData = {
+    const payload = {
       ...formData,
       tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean)
     };
-
     try {
-      await onCreate(flagData); // parent will add + refetch
-      onClose();                // close right away for snappy UX
+      await onCreate(payload);
+      onClose();
     } catch (err) {
       console.error('Create flag error:', err);
       alert(err.message || 'Failed to create flag');
@@ -990,12 +869,9 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg max-w-md w-full p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Feature Flag</h3>
-        
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Flag Name
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Flag Name</label>
             <input
               type="text"
               value={formData.name}
@@ -1008,9 +884,7 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -1023,9 +897,7 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Type
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
               <select
                 value={formData.flag_type}
                 onChange={(e) => setFormData({ ...formData, flag_type: e.target.value })}
@@ -1038,11 +910,8 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
                 <option value="killswitch">Kill Switch</option>
               </select>
             </div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Risk Level
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Risk Level</label>
               <select
                 value={formData.risk_level}
                 onChange={(e) => setFormData({ ...formData, risk_level: e.target.value })}
@@ -1058,9 +927,7 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Tags (comma-separated)
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
             <input
               type="text"
               value={formData.tags}
@@ -1105,10 +972,7 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
         </form>
       </div>
     </div>
-  )
-}
+  );
+};
 
-// Safe JSON parse helper
-const safeJsonGet = (s) => { try { return JSON.parse(s) } catch { return null } };
-
-export default Dashboard
+export default Dashboard;
