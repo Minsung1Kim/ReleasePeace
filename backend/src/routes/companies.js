@@ -236,8 +236,8 @@ router.post('/:companyId/regenerate-invite',
 router.get(
   '/:companyId/members',
   authMiddleware,
-  requireCompanyContext,     // ✅ sets req.companyId from header or URL
-  requireRole(['viewer','pm','admin','owner']),
+  requireCompanyContext,
+  requireRole(['member','engineer','viewer','pm','admin','owner']),
   async (req, res, next) => {
     try {
       const { companyId } = req.params;
