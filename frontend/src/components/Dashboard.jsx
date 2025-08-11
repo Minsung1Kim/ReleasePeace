@@ -582,7 +582,7 @@ function Dashboard({
                     onClick={openManageRoles}
                     disabled={!company?.id}
                     className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  >
+                  > 
                     Manage Roles
                   </button>
                 </>
