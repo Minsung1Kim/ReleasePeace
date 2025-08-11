@@ -16,80 +16,61 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(endpoint, { method = 'GET', body, headers = {} } = {}) {
-  // Build a safe path: ensure it starts with /api/ exactly once
-  const clean = String(endpoint || '');
-  const path = clean.startsWith('/api/')
-    ? clean
-    : '/api' + (clean.startsWith('/') ? clean : `/${clean}`);
+function buildUrl(endpoint) {
+  const base = config.apiUrl.replace(/\/$/, ''); // no trailing slash
+  let p = String(endpoint || '');
+  if (!p.startsWith('/')) p = '/' + p;
 
-  const url = `${config.apiUrl.replace(/\/$/, '')}${path}`;
+  // Auto-prefix /api for app endpoints, but NOT for /sdk endpoints
+  if (!p.startsWith('/api/') && !p.startsWith('/sdk/')) p = '/api' + p;
 
-  // Add auth token (Firebase preferred; fall back to local JWT)
+  return base + p;
+}
+
+export async function apiRequest(endpoint, { method = 'GET', body, headers = {}, signal } = {}) {
+  const url = buildUrl(endpoint);
+
+  // Firebase token
   const auth = getAuth();
   const user = auth.currentUser;
   let token = null;
-  try {
-    token = user ? await user.getIdToken() : null;
-  } catch (_) { /* ignore */ }
+  try { token = user ? await user.getIdToken() : null; } catch {}
 
+  // Fallback to any local token you store
   if (!token) {
-    // fallback to your existing local token if you store one
     const stored = localStorage.getItem('releasepeace_token');
     if (stored) token = stored;
   }
 
-  const defaultOptions = {
+  const init = {
+    method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  };
-
-  const mergedOptions = {
-    ...defaultOptions,
-    ...options,
-    headers: {
-      ...defaultOptions.headers,
       ...headers,
     },
-    method,
-    body: body ? JSON.stringify(body) : undefined,
     credentials: 'include',
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(signal ? { signal } : {}),
   };
 
-  try {
-    let response = await fetch(url, mergedOptions);
+  let res = await fetch(url, init);
 
-    // If Firebase token expired, refresh once and retry
-    if (response.status === 401 && user) {
-      try {
-        const fresh = await user.getIdToken(true);
-        const retried = await fetch(url, {
-          ...mergedOptions,
-          headers: {
-            ...mergedOptions.headers,
-            Authorization: `Bearer ${fresh}`,
-          },
-        });
-        response = retried;
-      } catch (_) { /* ignore */ }
-    }
-
-    const data = await response.json();
-    if (!response.ok) {
-      throw new ApiError(
-        data.message || `HTTP ${response.status}`,
-        response.status,
-        data
-      );
-    }
-    return data;
-  } catch (err) {
-    // (keep your existing error handling or rethrow)
-    throw err;
+  // One retry if Firebase token expired
+  if (res.status === 401 && user) {
+    try {
+      const fresh = await user.getIdToken(true);
+      res = await fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${fresh}` } });
+    } catch {}
   }
+
+  const ct = res.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await res.json() : await res.text();
+
+  if (!res.ok) throw new ApiError(typeof data === 'string' ? data : data?.message || `HTTP ${res.status}`, res.status, data);
+  return data;
 }
+
 
 // Auth API calls
 export const auth = {
@@ -211,5 +192,4 @@ export async function transferOwnership(companyId, newOwnerUserId) {
 export async function removeMember(companyId, userId) {
   return apiRequest(`/api/companies/${companyId}/members/${userId}`, {
     method: 'DELETE',
-  });
-}
+  });}
