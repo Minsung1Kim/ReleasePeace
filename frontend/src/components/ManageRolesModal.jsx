@@ -1,17 +1,22 @@
 import { useEffect, useRef, useState } from "react";
+import { apiRequest } from '../utils/api';
 
 // Adjust to your roles:
 const ROLE_OPTIONS = ["owner", "admin", "pm", "engineer", "qa", "viewer"];
 
-export default function ManageRolesModal({
-  members = [],
-  onClose,
-  onChangeRole,
-  onTransferOwnership,  // optional
-  onRemoveMember,       // optional
-  currentUserId,        // optional: to disable transfer to self
-}) {
+export default function ManageRolesModal({ open, companyId, onClose }) {
   const overlayRef = useRef(null);
+  const [members, setMembers] = useState([]);
+
+  // Fetch members when modal opens
+  useEffect(() => {
+    if (!open || !companyId) return;
+    apiRequest(`/companies/${companyId}/members`, {
+      headers: { 'X-Company-Id': companyId }
+    })
+      .then(setMembers)
+      .catch(console.error);
+  }, [open, companyId]);
 
   // Close on ESC
   useEffect(() => {
@@ -24,6 +29,27 @@ export default function ManageRolesModal({
   const handleOverlayClick = (e) => {
     if (e.target === overlayRef.current) onClose?.();
   };
+
+  function changeRole(userId, role) {
+    apiRequest(`/companies/${companyId}/members/${userId}/role`, {
+      method: 'PATCH',
+      body: { role },
+      headers: { 'X-Company-Id': companyId }
+    })
+      .then(() => {
+        setMembers(m => m.map(x => x.id === userId ? { ...x, role } : x));
+      })
+      .catch(console.error);
+  }
+
+  function remove(userId) {
+    apiRequest(`/companies/${companyId}/members/${userId}`, {
+      method: 'DELETE',
+      headers: { 'X-Company-Id': companyId }
+    })
+      .then(() => setMembers(m => m.filter(x => x.id !== userId)))
+      .catch(console.error);
+  }
 
   return (
     <div
@@ -47,10 +73,8 @@ export default function ManageRolesModal({
               <MemberRow
                 key={m.id}
                 member={m}
-                onChangeRole={onChangeRole}
-                onTransferOwnership={onTransferOwnership}
-                onRemoveMember={onRemoveMember}
-                currentUserId={currentUserId}
+                onChangeRole={changeRole}
+                onRemoveMember={remove}
               />
             ))}
           </ul>
@@ -72,16 +96,13 @@ export default function ManageRolesModal({
 function MemberRow({
   member,
   onChangeRole,
-  onTransferOwnership,
   onRemoveMember,
-  currentUserId,
 }) {
   const btnRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 224 }); // px
 
   const isOwner = member.role === "owner";
-  const isSelf = currentUserId && member.id === currentUserId;
 
   const doChangeRole = async (role) => {
     setMenuOpen(false);
@@ -93,13 +114,6 @@ function MemberRow({
       return;
     }
     await onChangeRole(member.id, role);
-  };
-
-  const doTransfer = async () => {
-    setMenuOpen(false);
-    if (!onTransferOwnership) return;
-    if (!confirm(`Transfer ownership to ${member.email}?`)) return;
-    await onTransferOwnership(member.id);
   };
 
   const doRemove = async () => {
@@ -182,12 +196,7 @@ function MemberRow({
                 </MenuItem>
               ))}
               <div className="my-1 border-t" />
-              <MenuItem
-                onClick={doTransfer}
-                disabled={!onTransferOwnership || isSelf || isOwner}
-              >
-                Transfer ownership
-              </MenuItem>
+              {/* Transfer ownership removed for this version */}
               <MenuItem
                 onClick={doRemove}
                 disabled={!onRemoveMember || isOwner}

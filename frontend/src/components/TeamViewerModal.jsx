@@ -1,13 +1,33 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
+import { apiRequest } from '../utils/api';
 
-export default function TeamViewerModal({ members = [], onClose }) {
+export default function TeamViewerModal({ open, companyId, onClose }) {
   const overlayRef = useRef(null);
+  const [code, setCode] = useState('');
+
+  useEffect(() => {
+    if (!open || !companyId) return;
+    apiRequest(`/companies/${companyId}/invite-code`, {
+      headers: { 'X-Company-Id': companyId }
+    })
+      .then(r => setCode(r.invite_code || r?.inviteCode || ''))
+      .catch(console.error);
+  }, [open, companyId]);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose?.();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  function regenerate() {
+    apiRequest(`/companies/${companyId}/regenerate-invite`, {
+      method: 'POST',
+      headers: { 'X-Company-Id': companyId }
+    })
+      .then(r => setCode(r.invite_code || r?.inviteCode || ''))
+      .catch(console.error);
+  }
 
   return (
     <div
@@ -17,22 +37,30 @@ export default function TeamViewerModal({ members = [], onClose }) {
     >
       <div className="bg-white w-full max-w-xl rounded-2xl shadow-xl">
         <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">Team</h2>
-          <p className="text-xs text-gray-500 mt-1">View-only list of members and roles</p>
+          <h2 className="text-lg font-semibold">Invite Code</h2>
+          <p className="text-xs text-gray-500 mt-1">Share this code to invite teammates</p>
         </div>
 
-        <div className="p-2 max-h-[70vh] overflow-y-auto">
-          <ul className="divide-y">
-            {members.map((m) => (
-              <li key={m.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{m.name || m.email}</div>
-                  <div className="text-xs text-gray-500 truncate">{m.email}</div>
-                </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 border">{m.role}</span>
-              </li>
-            ))}
-          </ul>
+        <div className="p-4">
+          <div className="mb-2">
+            <input
+              readOnly
+              value={code}
+              className="w-full px-3 py-2 border rounded text-lg font-mono bg-gray-50"
+            />
+          </div>
+          <button
+            className="px-3 py-2 rounded border bg-blue-50 text-blue-700 mr-2"
+            onClick={regenerate}
+          >
+            Regenerate
+          </button>
+          <button
+            className="px-3 py-2 rounded border bg-gray-50 text-gray-700"
+            onClick={() => navigator.clipboard.writeText(code)}
+          >
+            Copy
+          </button>
         </div>
 
         <div className="p-3 flex justify-end gap-2 border-t">

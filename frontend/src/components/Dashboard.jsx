@@ -360,7 +360,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
 
   function handleSwitchCompany(next) {
     if (!next) return;
-    setCompany(next);
+    setActiveCompany(next);
     if (next?.id) localStorage.setItem('rp_company_id', next.id);
     // TODO: reload any data that depends on company here (flags, members, etc.)
   }
@@ -372,7 +372,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         try { await user.getIdToken(true); } catch {}
         try {
           const mine = await companies.getMine();
-          setCompany(mine);
+          setActiveCompany(mine);
           if (mine?.id) localStorage.setItem('rp_company_id', mine.id);
         } catch (e) { console.error('load company failed', e); }
       }
@@ -406,7 +406,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       try {
         const mine = await companies.getMine();
         if (mine?.id) {
-          if (typeof setCompany === 'function') setCompany(mine);
+          setActiveCompany(mine);
           localStorage.setItem('rp_company_id', mine.id);
         }
       } catch (e) {
@@ -879,7 +879,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       {/* New Invite Modal */}
       {showInvite && (
         <TeamViewerModal
-          open={showInvite}
+          open
           companyId={company?.id}
           onClose={() => setShowInvite(false)}
         />
@@ -887,7 +887,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
 
       {showManageRoles && (
         <ManageRolesModal
-          open={showManageRoles}
+          open
           companyId={company?.id}
           onClose={() => setShowManageRoles(false)}
         />
