@@ -161,22 +161,20 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   // Hydrate company from localStorage or API once on mount
   useEffect(() => {
     (async () => {
-      // 1) from localStorage
-      try {
-        const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
-        if (saved?.id) {
-          setActiveCompany(saved);
-          return;
-        }
-      } catch {}
-      // 2) API fallback
+      // 1) localStorage first (fast path)
+      const saved = safeJsonGet(localStorage.getItem('releasepeace_company'));
+      if (saved?.id) {
+        setActiveCompany(saved);
+        return;
+      }
+      // 2) server fallback
       try {
         const mine = await companies.getMine();
         const chosen = Array.isArray(mine) ? mine[0] : mine?.company || null;
         if (chosen?.id) {
           setActiveCompany(chosen);
+          localStorage.setItem('releasepeace_company', JSON.stringify(chosen));
           localStorage.setItem('rp_company_id', chosen.id);
-          localStorage.setItem('releasepeace_company', JSON.stringify(chosen)); // ✅
         }
       } catch {}
     })();
@@ -194,11 +192,10 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
 
   // used by your Switch Company UI (and any child needing a handler)
   function handleSwitchCompany(next) {
-    if (!next) return;
     setActiveCompany(next);
     if (next?.id) {
+      localStorage.setItem('releasepeace_company', JSON.stringify(next));
       localStorage.setItem('rp_company_id', next.id);
-      localStorage.setItem('releasepeace_company', JSON.stringify(next)); // ✅
     }
     if (typeof onSwitchCompany === 'function') onSwitchCompany(next);
   }
@@ -305,24 +302,23 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     setRolesOpen(true);
   }
 
-  async function openTeam() {
+  const handleOpenTeam = async () => {
     let id = company?.id;
     if (!id) {
-      try {
-        const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
-        id = saved?.id;
-      } catch {}
-      if (!id) id = localStorage.getItem('rp_company_id') || undefined;
+      const saved = safeJsonGet(localStorage.getItem('releasepeace_company'));
+      id = saved?.id || localStorage.getItem('rp_company_id');
     }
-    if (!id) return console.warn('Select or create a company first.');
+    if (!id) return console.warn('Select or create a company first');
+
     setTeamOpen(true);
     try {
-      const list = await getMembers(id);   // your api helper
-      setMembers(list?.members || list?.items || list || []);
+      const list = await getMembers(id); // use hardened helper
+      setMembers(list?.members || list || []);
     } catch (e) {
+      setTeamOpen(false);
       console.error('load members failed', e);
     }
-  }
+  };
 
   // Always parsed JSON, with X-Company-Id from state or localStorage
   const authedFetch = (path, opts = {}) => {
@@ -482,8 +478,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     try {
       const data = await authedFetch('/api/flags', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(flagData)
+        body: flagData
       });
 
       // accept either { success, flag } or just the flag
@@ -511,29 +506,24 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   const toggleFlagState = async (flagId, environment, currentState, flag) => {
     try {
       const enabling = !currentState.is_enabled;
-
       let reason = '';
       if (enabling) {
         const needsReason =
           environment === 'production' &&
           (flag?.risk_level === 'high' || flag?.risk_level === 'critical');
-
         reason = window.prompt(
           needsReason
             ? 'Change justification (required for high/critical in production):'
             : 'Optional: reason for this change?'
         ) || '';
-
         if (needsReason && !reason.trim()) {
           alert('A justification is required to enable this flag in production.');
           return;
         }
       }
-
       const data = await authedFetch(`/api/flags/${flagId}/state/${environment}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_enabled: enabling, reason })
+        body: { is_enabled: enabling, reason }
       });
 
       // server returns { error: 'Approval required' } with 403 → apiRequest would have thrown.
@@ -615,7 +605,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                   </button>
                 </>
               ) : (
-                <button onClick={openTeam} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                <button onClick={handleOpenTeam} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                   Team
                 </button>
               )}
@@ -813,8 +803,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                                     try {
                                       const res = await authedFetch(`/api/flags/${flag.id}/rollback`, {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ reason: why })
+                                        body: { reason: why }
                                       });
                                       const data = res;
                                       if (!res.ok || !data.success) throw new Error(data.message || 'Rollback failed');

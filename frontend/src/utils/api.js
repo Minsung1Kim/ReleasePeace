@@ -40,68 +40,65 @@ function buildUrl(endpoint) {
   return base + p;
 }
 
-export async function apiRequest(endpoint, { method = 'GET', body, headers = {}, signal } = {}) {
-  const url = buildUrl(endpoint);
+export async function apiRequest(path, opts = {}) {
+  const {
+    method = 'GET',
+    body,                      // <= pass plain objects here
+    token,
+    companyId,
+    headers = {},
+    signal,
+  } = opts;
 
-  // Firebase token
-  const auth = getAuth();
-  const user = auth.currentUser;
-  let token = null;
-  try { token = user ? await user.getIdToken() : null; } catch {}
+  const url = buildUrl(path);
+  const hdrs = { Accept: 'application/json', ...headers };
 
-  // Fallback to any local token you store
-  if (!token) {
-    const stored = localStorage.getItem('releasepeace_token');
-    if (stored) token = stored;
+  // Only stringify once, and only if it's not FormData
+  let payload = body;
+  if (payload !== undefined && !(payload instanceof FormData)) {
+    hdrs['Content-Type'] = 'application/json';
+    payload = JSON.stringify(payload);
   }
 
-  // Inject X-Company-Id if missing
-  const ensureCompanyHeader = (headers = {}) => {
-    let id = headers['X-Company-Id'] || headers['x-company-id'];
-    if (!id) {
-      try {
-        const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
-        id = saved?.id;
-      } catch {}
-      if (!id) id = localStorage.getItem('rp_company_id') || undefined;
+  // Auth
+  if (!hdrs.Authorization) {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    let t = token;
+    try { t = t || (user ? await user.getIdToken() : null); } catch {}
+    if (!t) {
+      const stored = localStorage.getItem('releasepeace_token');
+      if (stored) t = stored;
     }
-    return id ? { ...headers, 'X-Company-Id': id } : headers;
-  };
-
-  const companyIdFromLocal =
-    headers['X-Company-Id'] ||
-    headers['x-company-id'] ||
-    localStorage.getItem('rp_company_id') ||
-    localStorage.getItem('companyId') ||
-    localStorage.getItem('activeCompanyId');
-
-  const init = {
-    method,
-    headers: ensureCompanyHeader({
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers, // caller can still override
-    }),
-    credentials: 'include',
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    ...(signal ? { signal } : {}),
-  };
-
-  let res = await fetch(url, init);
-
-  // One retry if Firebase token expired
-  if (res.status === 401 && user) {
-    try {
-      const fresh = await user.getIdToken(true);
-      res = await fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${fresh}` } });
-    } catch {}
+    if (t) hdrs.Authorization = `Bearer ${t}`;
   }
 
-  const ct = res.headers.get('content-type') || '';
-  const data = ct.includes('application/json') ? await res.json() : await res.text();
+  // Company header (fallbacks)
+  let cid = companyId;
+  if (!cid) {
+    try {
+      const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
+      cid = saved?.id;
+    } catch {}
+    if (!cid) cid = localStorage.getItem('rp_company_id');
+  }
+  if (cid) hdrs['X-Company-Id'] = cid;
 
-  if (!res.ok) throw new ApiError(typeof data === 'string' ? data : data?.message || `HTTP ${res.status}`, res.status, data);
-  return data;
+  const res = await fetch(url, {
+    method,
+    headers: hdrs,
+    body: payload,
+    credentials: 'include',
+    ...(signal ? { signal } : {}),
+  });
+
+  // normalize errors
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { msg = (await res.json())?.error || msg; } catch {}
+    throw new ApiError(msg, res.status);
+  }
+  return res.status === 204 ? null : res.json();
 }
 
 
@@ -110,7 +107,7 @@ export const auth = {
   login: (credentials) => 
     apiRequest('/api/users/login', {
       method: 'POST',
-      body: JSON.stringify(credentials)
+      body: credentials
     }),
 
   getMe: () => apiRequest('/api/users/me'),
@@ -118,24 +115,31 @@ export const auth = {
   switchCompany: (companyId) =>
     apiRequest('/api/users/switch-company', {
       method: 'POST',
-      body: JSON.stringify({ company_id: companyId })
+      body: { company_id: companyId }
     })
 }
 
 // Company API calls
 export const companies = {
-  getMine: () => apiRequest('/api/companies/mine'),
-  
+  // ⬇️ normalize to a single company object
+  getMine: async () => {
+    const res = await apiRequest('/api/companies/mine');
+    if (Array.isArray(res)) return res[0] || null;
+    if (res && Array.isArray(res.companies)) return res.companies[0] || null;
+    if (res && res.company) return res.company;
+    return res || null;
+  },
+
   create: (companyData) =>
     apiRequest('/api/companies', {
       method: 'POST',
-      body: JSON.stringify(companyData)
+      body: companyData
     }),
 
   join: (inviteCode) =>
     apiRequest('/api/companies/join', {
       method: 'POST',
-      body: JSON.stringify({ invite_code: inviteCode })
+      body: { invite_code: inviteCode }
     }),
 
   get: (companyId) => apiRequest(`/api/companies/${companyId}`),
@@ -155,13 +159,13 @@ export const flags = {
   create: (flagData) =>
     apiRequest('/api/flags', {
       method: 'POST',
-      body: JSON.stringify(flagData)
+      body: flagData
     }),
 
   update: (flagId, flagData) =>
     apiRequest(`/api/flags/${flagId}`, {
       method: 'PUT',
-      body: JSON.stringify(flagData)
+      body: flagData
     }),
 
   delete: (flagId) =>
@@ -172,7 +176,7 @@ export const flags = {
   updateState: (flagId, environment, stateData) =>
     apiRequest(`/api/flags/${flagId}/state/${environment}`, {
       method: 'PUT',
-      body: JSON.stringify(stateData)
+      body: stateData
     })
 }
 
@@ -187,19 +191,19 @@ export const sdk = {
   evaluate: (flagName, user = {}, environment = 'production') =>
     apiRequest(`/sdk/evaluate/${flagName}`, {
       method: 'POST',
-      body: JSON.stringify({ user, environment })
+      body: { user, environment }
     }),
 
   evaluateBulk: (flags, user = {}, environment = 'production') =>
     apiRequest('/sdk/evaluate-bulk', {
       method: 'POST',
-      body: JSON.stringify({ flags, user, environment })
+      body: { flags, user, environment }
     }),
 
   track: (flagName, user, event, value, environment = 'production') =>
     apiRequest(`/sdk/track/${flagName}`, {
       method: 'POST',
-      body: JSON.stringify({ user, event, value, environment })
+      body: { user, event, value, environment }
     })
 }
 
