@@ -1,49 +1,46 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../utils/api';
 
-export default function ApprovalBadge({ flag }) {
+// Use EITHER flagId OR flagKey. We guard so we never hit /undefined/...
+export default function ApprovalBadge({ flagId, flagKey }) {
+  const idOrKey = flagId ?? flagKey;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Use whichever is available: flag.id or flag.key
-  const flagIdOrKey = flag?.id || flag?.key;
-
   async function refresh() {
+    if (!idOrKey) return; // <- hard guard
     try {
-      const r = await apiRequest(`/api/flags/${flagIdOrKey}/approvals`);
-      setItems(Array.isArray(r) ? r : []);
+      const data = await apiRequest(`/flags/${idOrKey}/approvals`);
+      setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('approvals refresh failed', e);
     }
   }
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [flagIdOrKey]);
+
+  useEffect(() => { refresh(); }, [idOrKey]);
 
   async function requestApproval() {
+    if (!idOrKey) return;
     setLoading(true);
     try {
-      await apiRequest(`/api/flags/${flagIdOrKey}/approvals`, {
-        method: 'POST',
-        body: JSON.stringify({ requiredRoles: ['QA','LEGAL'], requiredCount: 2 })
-      });
+      await apiRequest(`/flags/${idOrKey}/approvals`, { method: 'POST', body: {} });
       await refresh();
-    } catch (e) {
-      console.error('requestApproval failed', e);
     } finally {
       setLoading(false);
     }
   }
 
+  // simple UI
   const latest = items?.[0];
   const status = latest?.status || 'none';
-  const color = status === 'approved' ? '#16a34a' : status === 'rejected' ? '#dc2626' : '#d97706';
 
   return (
     <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-      <span style={{ padding:'2px 8px', border:`1px solid ${color}`, borderRadius:8, color }}>
+      <span style={{ padding:'2px 8px', border:'1px solid #555', borderRadius:8 }}>
         {`Approvals: ${status}`}
       </span>
-      <button onClick={requestApproval} disabled={loading}
-        style={{ padding:'4px 10px', borderRadius:8, border:'1px solid #555', opacity: loading ? 0.6 : 1 }}>
+      <button onClick={requestApproval} disabled={loading || !idOrKey}
+        style={{ padding:'4px 10px', borderRadius:8, border:'1px solid #555', opacity: (loading || !idOrKey) ? 0.6 : 1 }}>
         {loading ? 'Requesting…' : 'Request approval'}
       </button>
     </div>

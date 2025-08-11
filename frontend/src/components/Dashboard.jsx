@@ -702,7 +702,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                           {envStats.enabled}/{envStats.total} environments enabled
                         </div>
                         {/* ApprovalBadge under actions row */}
-                        <ApprovalBadge flagKey={flag.key || flag.id} token={token} />
+                        <ApprovalBadge flagId={flag.id} />
                       </div>
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">
