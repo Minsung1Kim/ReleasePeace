@@ -577,16 +577,24 @@ router.get(
     try {
       const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
       const rows = await AuditLog.findAll({
-        where: { company_id: req.companyId },
-        include: [{ model: User, as: 'user' }, { model: FeatureFlag, as: 'flag' }],
+        include: [
+          { model: User, as: 'user' },
+          { model: FeatureFlag, as: 'flag', where: { company_id: req.companyId } }
+        ],
         order: [['created_at', 'DESC']],
-        limit,
+        limit
       });
+
       res.json({
         items: rows.map(l => ({
-          id: l.id, created_at: l.created_at, action: l.action,
-          environment: l.environment, user: l.user, flag: l.flag, reason: l.reason
-        })),
+          id: l.id,
+          created_at: l.created_at,
+          action: l.action,
+          environment: l.environment,
+          user: l.user,
+          flag: l.flag,
+          reason: l.reason
+        }))
       });
     } catch (e) {
       res.status(500).json({ error: 'Failed to load recent audit', message: e.message });
