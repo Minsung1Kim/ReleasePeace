@@ -200,7 +200,7 @@ function Dashboard({
   const isOwnerOrAdmin = ['owner', 'admin'].includes(effectiveRole);
   const canCreate = ['owner','admin','pm'].includes(effectiveRole);
   const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
-  const canManage = effectiveRole === 'owner' || effectiveRole === 'admin';
+  const canManage = ['owner','admin'].includes(company?.role);
   const environments = ['development', 'staging', 'production'];
   // Team modal handler
   const openTeam = async () => {
@@ -219,6 +219,21 @@ function Dashboard({
       setTeamError(e.message || 'Failed to load members.');
     } finally {
       setTeamLoading(false);
+    }
+  };
+
+  // Invite modal handler
+  const openInvite = async () => {
+    if (!company?.id) {
+      alert('Select or create a company first.');
+      return;
+    }
+    try {
+      await loadInvite(); // fetches and sets inviteCode
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setTeamOpen(true); // show TeamViewerModal (renders invite section)
     }
   };
   const companyPathParam = () => {
@@ -589,9 +604,19 @@ function Dashboard({
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
               <ActivityBell authedFetch={authedFetch} />
 
+            {canManage && (
+              <button
+                type="button"
+                onClick={openInvite}
+                className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+              >
+                Invite
+              </button>
+            )}
+
             <button
+              type="button"
               onClick={openTeam}
-              disabled={!company?.id}
               className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
             >
               Team
