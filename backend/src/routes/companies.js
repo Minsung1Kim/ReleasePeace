@@ -1,11 +1,10 @@
 // backend/src/routes/companies.js
-// backend/src/routes/companies.js
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 
-const { authMiddleware } = require('../middleware/auth');
-const { requireCompanyContext } = require('../middleware/company');
+const { requireAuth } = require('../middleware/auth');
+const { requireCompanyMembership } = require('../middleware/company');
 const { requireRole } = require('../middleware/roles');
 const { User, UserCompany, Company } = require('../models');
 const { Op, fn, col, where } = require('sequelize');
@@ -22,7 +21,7 @@ function genCode() {
 ---------------------------- */
 
 // List companies for current user (must be before "/:companyId")
-router.get('/mine', authMiddleware, async (req, res, next) => {
+router.get('/mine', requireAuth, async (req, res, next) => {
   try {
     const rows = await UserCompany.findAll({
       where: { user_id: req.user.id, status: 'active' },
@@ -44,7 +43,7 @@ router.get('/mine', authMiddleware, async (req, res, next) => {
 });
 
 // Create a new company; creator becomes owner
-router.post('/', authMiddleware, async (req, res, next) => {
+router.post('/', requireAuth, async (req, res, next) => {
   const t = await Company.sequelize.transaction();
   try {
     let { name, subdomain, plan = 'starter' } = req.body || {};
@@ -85,10 +84,11 @@ router.post('/', authMiddleware, async (req, res, next) => {
       is_active: true,
     }, { transaction: t });
 
+    // Set creator as owner (membership row)
     await UserCompany.create({
       user_id: req.user.id,
       company_id: company.id,
-      role: 'owner',
+      role: 'owner', // <-- IMPORTANT
       status: 'active',
     }, { transaction: t });
 
@@ -119,7 +119,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
 // Join by invite code
 // Join by invite code (case-insensitive, trims spaces)
-router.post('/join', authMiddleware, async (req, res, next) => {
+router.post('/join', requireAuth, async (req, res, next) => {
   try {
     const invite_code_raw = (req.body?.invite_code ?? '').toString().trim();
     if (!invite_code_raw) {
@@ -164,22 +164,16 @@ router.post('/join', authMiddleware, async (req, res, next) => {
 
 // Basic company info (with invite_code)
 router.get('/:companyId',
-  authMiddleware,
-  requireRole('member', 'admin', 'owner'),
+  requireAuth,
+  requireCompanyMembership,      // enough for read
   async (req, res, next) => {
     try {
-      const { companyId } = req.params;
-      const company = await Company.findByPk(companyId, {
-        attributes: ['id', 'name', 'plan', 'is_active', 'invite_code', 'owner_id'],
-      });
-      if (!company) return res.status(404).json({ error: 'company not found' });
-
+      const company = req.company;
       // ensure a code exists
       if (!company.invite_code) {
         company.invite_code = genCode();
         await company.save();
       }
-
       res.json({
         success: true,
         company: {
@@ -195,36 +189,17 @@ router.get('/:companyId',
   }
 );
 
-// Just the invite code (owner/admin can see)
-router.get('/:companyId/invite-code',
-  authMiddleware,
-  requireRole('admin', 'owner'),
-  async (req, res, next) => {
-    try {
-      const company = await Company.findByPk(req.params.companyId);
-      if (!company) return res.status(404).json({ error: 'Company not found' });
-      if (!company.invite_code) {
-        company.invite_code = genCode();
-        await company.save();
-      }
-      res.json({ success: true, invite_code: company.invite_code });
-    } catch (err) { next(err); }
-  }
-);
-
-// Regenerate invite code
+// Regenerate invite code (owner/admin only)
 router.post('/:companyId/regenerate-invite',
-  authMiddleware,
-  requireRole('admin', 'owner'),
+  requireAuth,
+  requireCompanyMembership,
+  requireRole(['owner','admin']),
   async (req, res, next) => {
     try {
-      const company = await Company.findByPk(req.params.companyId);
-      if (!company) return res.status(404).json({ error: 'company not found' });
-
-      company.invite_code = genCode();
-      await company.save();
-      res.json({ success: true, id: company.id, invite_code: company.invite_code });
-    } catch (err) { next(err); }
+      req.company.invite_code = crypto.randomBytes(8).toString('base64url').slice(0,12);
+      await req.company.save();
+      res.json({ invite_code: req.company.invite_code });
+    } catch (e) { next(e); }
   }
 );
 
@@ -235,30 +210,21 @@ router.post('/:companyId/regenerate-invite',
 // List members
 router.get(
   '/:companyId/members',
-  authMiddleware,
-  requireCompanyContext,
-  requireRole(['member','engineer','viewer','pm','admin','owner']),
+  requireAuth,
+  requireCompanyMembership,
   async (req, res, next) => {
     try {
-      const { companyId } = req.params;
-      const rows = await UserCompany.findAll({
-        where: { company_id: companyId, status: 'active' },
-        include: [{ model: User, as: 'user', attributes: ['id', 'email', 'display_name', 'username'] }],
-      });
-      const members = rows.map(rc => ({
-        id: rc.user.id,
-        email: rc.user.email,
-        name: rc.user.display_name || rc.user.username || rc.user.email,
-        role: rc.role,
-      }));
-      res.json(members);
-    } catch (err) { next(err); }
+      const full = ['owner','admin'].includes(String(req.membership.role).toLowerCase());
+      // getMembers should be implemented on Company model
+      const members = await req.company.getMembers?.({ full });
+      res.json({ members });
+    } catch (e) { next(e); }
   }
 );
 
 // Change a member's role (not owner)
 router.patch('/:companyId/members/:userId/role',
-  authMiddleware,
+  requireAuth,
   requireRole('admin', 'owner'),
   async (req, res, next) => {
     try {
@@ -280,7 +246,7 @@ router.patch('/:companyId/members/:userId/role',
 
 // Transfer ownership
 router.post('/:companyId/ownership',
-  authMiddleware,
+  requireAuth,
   requireRole('owner'),
   async (req, res, next) => {
     const t = await Company.sequelize.transaction();
@@ -310,7 +276,7 @@ router.post('/:companyId/ownership',
 
 // Remove a member (not the current owner)
 router.delete('/:companyId/members/:userId',
-  authMiddleware,
+  requireAuth,
   requireRole('admin', 'owner'),
   async (req, res, next) => {
     try {

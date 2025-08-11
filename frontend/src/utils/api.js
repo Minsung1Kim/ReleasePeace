@@ -1,23 +1,41 @@
-// Hardened company members API helper
-export async function getMembers(companyId) {
-  let id = companyId;
-  if (!id) {
-    try {
-      const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
-      id = saved?.id;
-    } catch {}
-    if (!id) id = localStorage.getItem('rp_company_id') || undefined;
-  }
-  if (!id) throw new ApiError('No company selected', 400);
-  return apiRequest(`/api/companies/${id}/members`, { headers: { 'X-Company-Id': id } });
-}
-
 import { config } from '../config';
 import { getAuth } from 'firebase/auth';
 
+const BASE = config.apiUrl.replace(/\/$/, '');
+
+async function authHeader(forceFresh = false) {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) throw new ApiError('Not authenticated', 401);
+  const token = await user.getIdToken(forceFresh);
+  return { Authorization: `Bearer ${token}` };
+}
+
+function companyHeader(companyId) {
+  return companyId ? { 'X-Company-Id': companyId } : {};
+}
+
+// Hardened company members API helper
+export async function getMembers(companyId) {
+  const headers = {
+    ...(await authHeader(true)),
+    ...companyHeader(companyId)
+  };
+  const r = await fetch(`${BASE}/api/companies/${companyId}/members`, { headers });
+  if (!r.ok) throw new ApiError('Failed to fetch members', r.status, await r.json().catch(()=>({})));
+  return r.json();
+}
+
+
 // Get invite code for a company
 export async function getInviteCode(companyId) {
-  return apiRequest(`/api/companies/${companyId}/invite-code`);
+  const headers = {
+    ...(await authHeader(true)),
+    ...companyHeader(companyId)
+  };
+  const r = await fetch(`${BASE}/api/companies/${companyId}/invite-code`, { headers });
+  if (!r.ok) throw new ApiError('Failed to fetch invite code', r.status, await r.json().catch(()=>({})));
+  return r.json(); // { code }
 }
 
 export class ApiError extends Error {
@@ -217,7 +235,7 @@ export async function getCompanyMembers(companyId) {
 export async function updateMemberRole(companyId, userId, role) {
   return apiRequest(`/api/companies/${companyId}/members/${userId}/role`, {
     method: 'PATCH',
-    body: JSON.stringify({ role }),
+    body: { role }, // pass plain object
     headers: { 'X-Company-Id': companyId }
   });
 }
@@ -225,7 +243,7 @@ export async function updateMemberRole(companyId, userId, role) {
 export async function transferOwnership(companyId, newOwnerUserId) {
   return apiRequest(`/api/companies/${companyId}/ownership`, {
     method: 'POST',
-    body: JSON.stringify({ userId: newOwnerUserId }),
+    body: { userId: newOwnerUserId }, // pass plain object
     headers: { 'X-Company-Id': companyId }
   });
 }

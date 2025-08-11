@@ -16,22 +16,15 @@ async function getUserRoleInCompany(userId, companyId) {
  * Ensures the authed user has one of the allowed roles for the current company.
  * Needs req.user (authMiddleware) and req.company (extractCompanyContext) or X-Company-ID header.
  */
-function requireRole(...allowed) {
-  const allowedFlat = allowed.flat().filter(Boolean).map(r => String(r).toLowerCase());
-  return async (req, res, next) => {
-    try {
-      const companyId = resolveCompanyId(req); // ✅ consistent resolver
-      if (!companyId) {
-        return res.status(400).json({ error: 'Missing companyId' });
-      }
-      const role = String(req.membership?.role ?? req.user?.role ?? '').toLowerCase();
-      if (!role) return res.status(401).json({ error: 'No role on user/company membership' });
-      if (!allowedFlat.includes(role)) return res.status(403).json({ error: 'Insufficient role' });
-      next();
-    } catch (e) {
-      console.error('requireRole error:', e);
-      res.status(500).json({ error: 'Role check failed' });
-    }
+// normalize and accept arrays
+function requireRole(required) {
+  const need = (Array.isArray(required) ? required : [required]).map(r => String(r).toLowerCase());
+  return (req, res, next) => {
+    // Always check membership for company-scoped routes
+    const role = String(req.membership?.role || '').toLowerCase();
+    if (!role) return res.status(403).json({ error: 'Not a member' });
+    if (!need.includes(role)) return res.status(403).json({ error: 'Insufficient role', role });
+    next();
   };
 }
 

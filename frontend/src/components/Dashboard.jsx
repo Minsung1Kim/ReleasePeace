@@ -597,15 +597,15 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
               {/* Use correct button based on role */}
               {['owner','admin'].includes(company?.role) ? (
                 <>
-                  <button type="button" onClick={() => setShowInvite(true)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                  <button type="button" onClick={onOpenInvite} disabled={!company?.id || !['owner','admin'].includes(company?.role)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Invite
                   </button>
-                  <button type="button" onClick={() => setShowManageRoles(true)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                  <button type="button" onClick={showManageRoles ? undefined : onOpenTeam} disabled={!company?.id || !['owner','admin'].includes(company?.role)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Manage Roles
                   </button>
                 </>
               ) : (
-                <button onClick={handleOpenTeam} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                <button onClick={onOpenTeam} disabled={!company?.id} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                   Team
                 </button>
               )}
@@ -1107,5 +1107,8 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
     </div>
   )
 }
+
+// Safe JSON parse helper
+const safeJsonGet = (s) => { try { return JSON.parse(s) } catch { return null } };
 
 export default Dashboard
