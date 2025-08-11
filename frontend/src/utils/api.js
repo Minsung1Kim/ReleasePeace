@@ -42,12 +42,21 @@ export async function apiRequest(endpoint, { method = 'GET', body, headers = {},
     if (stored) token = stored;
   }
 
+  // find a company id automatically
+  const companyIdFromLocal =
+    headers['X-Company-Id'] ||
+    headers['x-company-id'] ||
+    localStorage.getItem('rp_company_id') ||
+    localStorage.getItem('companyId') ||
+    localStorage.getItem('activeCompanyId');
+
   const init = {
     method,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
+      ...(companyIdFromLocal ? { 'X-Company-Id': companyIdFromLocal } : {}),
+      ...headers, // caller can still override
     },
     credentials: 'include',
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -172,13 +181,16 @@ export const sdk = {
 
 // --- Company membership / roles (uses apiRequest + config.apiUrl) ---
 export async function getCompanyMembers(companyId) {
-  return apiRequest(`/api/companies/${companyId}/members`);
+  return apiRequest(`/api/companies/${companyId}/members`, {
+    headers: { 'X-Company-Id': companyId }
+  });
 }
 
 export async function updateMemberRole(companyId, userId, role) {
   return apiRequest(`/api/companies/${companyId}/members/${userId}/role`, {
     method: 'PATCH',
     body: JSON.stringify({ role }),
+    headers: { 'X-Company-Id': companyId }
   });
 }
 
@@ -186,10 +198,13 @@ export async function transferOwnership(companyId, newOwnerUserId) {
   return apiRequest(`/api/companies/${companyId}/ownership`, {
     method: 'POST',
     body: JSON.stringify({ userId: newOwnerUserId }),
+    headers: { 'X-Company-Id': companyId }
   });
 }
 
 export async function removeMember(companyId, userId) {
   return apiRequest(`/api/companies/${companyId}/members/${userId}`, {
     method: 'DELETE',
-  });}
+    headers: { 'X-Company-Id': companyId }
+  });
+}

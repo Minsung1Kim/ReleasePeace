@@ -347,6 +347,9 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     // Fetch flags for this company
     fetchFlags();
     loadRecent();
+
+    // Store company id for API header auto-inclusion
+    if (company?.id) localStorage.setItem('rp_company_id', company.id);
   }, [company, token])
 
   const fetchFlags = async () => {
@@ -556,7 +559,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               )}
 
               <button
-                onClick={onSwitchCompany}
+                onClick={handleSwitchCompany}
                 className="text-sm text-blue-600 hover:text-blue-500 px-3 py-1 border border-blue-200 rounded-md hover:bg-blue-50"
               >
                 Switch Company
@@ -702,7 +705,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                           {envStats.enabled}/{envStats.total} environments enabled
                         </div>
                         {/* ApprovalBadge under actions row */}
-                        <ApprovalBadge flagId={flag.id} />
+                        <ApprovalBadge flagId={flag.id} companyId={company.id} />
                       </div>
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">

@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react';
 import { apiRequest } from '../utils/api';
 
 // Use EITHER flagId OR flagKey. We guard so we never hit /undefined/...
-export default function ApprovalBadge({ flagId, flagKey }) {
+export default function ApprovalBadge({ flagId, flagKey, companyId }) {
   const idOrKey = flagId ?? flagKey;
+  const cid = companyId || localStorage.getItem('rp_company_id');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
   async function refresh() {
     if (!idOrKey) return; // <- hard guard
     try {
-      const data = await apiRequest(`/api/flags/${idOrKey}/approvals`);
+      const data = await apiRequest(`flags/${idOrKey}/approvals`, {
+        headers: cid ? { 'X-Company-Id': cid } : {}
+      });
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('approvals refresh failed', e);
@@ -23,7 +26,11 @@ export default function ApprovalBadge({ flagId, flagKey }) {
     if (!idOrKey) return;
     setLoading(true);
     try {
-      await apiRequest(`/api/flags/${idOrKey}/approvals`, { method: 'POST', body: {} });
+      await apiRequest(`flags/${idOrKey}/approvals`, {
+        method: 'POST',
+        body: {},
+        headers: cid ? { 'X-Company-Id': cid } : {}
+      });
       await refresh();
     } finally {
       setLoading(false);
