@@ -183,7 +183,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRe.test(id) ? id : (sub || id);
   };
-  const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id;
+  const companyId = company?.id ?? localStorage.getItem('rp_company_id') ?? undefined;
   const [apiStatus, setApiStatus] = useState('checking...');
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -202,12 +202,10 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   async function loadRecent() {
     setRecentLoading(true);
     try {
-      const res = await api.apiRequest('/api/flags/audit/recent?limit=20', {
+      const audit = await api.apiRequest('/api/flags/audit/recent?limit=20', {
         headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load recent activity');
-      setRecent(data.logs || []);
+      setRecent(audit.items ?? audit.logs ?? []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -435,15 +433,10 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   const fetchFlags = async () => {
     try {
       setLoading(true)
-      const response = await api.apiRequest('/api/flags', {
+      const data = await api.apiRequest('/api/flags', {
         headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
       });
-      const data = await response.json()
-      if (data.success) {
-        setFlags(data.flags || [])
-      } else {
-        throw new Error(data.message || 'Failed to load flags')
-      }
+      setFlags(data.flags ?? data ?? [])
     } catch (err) {
       setError(err.message)
       console.error('Failed to load flags:', err)
@@ -884,7 +877,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       {showInvite && (
         <TeamViewerModal
           open
-          companyId={company?.id}
+          companyId={companyId}
           onClose={() => setShowInvite(false)}
         />
       )}
@@ -892,7 +885,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       {showManageRoles && (
         <ManageRolesModal
           open
-          companyId={company?.id}
+          companyId={companyId}
           onClose={() => setShowManageRoles(false)}
         />
       )}

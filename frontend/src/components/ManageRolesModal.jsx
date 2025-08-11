@@ -11,7 +11,7 @@ export default function ManageRolesModal({ open, companyId, onClose }) {
   // Fetch members when modal opens
   useEffect(() => {
     if (!open || !companyId) return;
-    apiRequest(`/companies/${companyId}/members`, {
+    apiRequest(`companies/${companyId}/members`, {
       headers: { 'X-Company-Id': companyId }
     })
       .then(setMembers)

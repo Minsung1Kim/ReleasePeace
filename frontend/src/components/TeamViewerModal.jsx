@@ -7,10 +7,10 @@ export default function TeamViewerModal({ open, companyId, onClose }) {
 
   useEffect(() => {
     if (!open || !companyId) return;
-    apiRequest(`/companies/${companyId}/invite-code`, {
+    apiRequest(`companies/${companyId}/invite-code`, {
       headers: { 'X-Company-Id': companyId }
     })
-      .then(r => setCode(r.invite_code || r?.inviteCode || ''))
+      .then(r => setCode(r.invite_code || r.inviteCode || ''))
       .catch(console.error);
   }, [open, companyId]);
 
@@ -20,14 +20,13 @@ export default function TeamViewerModal({ open, companyId, onClose }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  function regenerate() {
-    apiRequest(`/companies/${companyId}/regenerate-invite`, {
+  const regenerate = () =>
+    apiRequest(`companies/${companyId}/regenerate-invite`, {
       method: 'POST',
       headers: { 'X-Company-Id': companyId }
     })
-      .then(r => setCode(r.invite_code || r?.inviteCode || ''))
+      .then(r => setCode(r.invite_code || r.inviteCode || ''))
       .catch(console.error);
-  }
 
   return (
     <div
