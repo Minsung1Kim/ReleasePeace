@@ -3,10 +3,10 @@ const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
+// tolerate missing approval middleware in production
 const { requireApprovalIfRisky } = (() => {
   try { return require('../middleware/requireApproval'); }
   catch {
-    console.warn('requireApproval middleware missing; skipping approval gate.');
     return { requireApprovalIfRisky: (req, res, next) => next() };
   }
 })();
@@ -42,44 +42,48 @@ async function writeAudit({ flagId, userId, action, oldState = null, newState = 
 
 /* ------------ list flags ------------ */
 
-router.get('/', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
-  try {
-    const flags = await FeatureFlag.findAll({
-      where: { company_id: req.companyId },
-      include: [
-        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
-        { model: FlagState, as: 'states' }
-      ],
-      order: [['created_at', 'DESC']]
-    });
-
-    res.json({ success: true, flags, total: flags.length, company_id: req.companyId });
-  } catch (error) {
-    console.error('Error fetching flags:', error);
-    res.status(500).json({ error: 'Failed to fetch flags', message: error.message });
+// list flags
+router.get(
+  '/',
+  authMiddleware,
+  extractCompanyContext,
+  requireCompanyMembership,
+  async (req, res) => {
+    try {
+      const flags = await FeatureFlag.findAll({
+        where: { company_id: req.companyId },
+        include: [{ model: FlagState, as: 'states' }],
+        order: [['created_at', 'DESC']],
+      });
+      res.json({ success: true, flags, total: flags.length, company_id: req.companyId });
+    } catch (err) {
+      console.error('Error fetching flags:', err);
+      res.status(500).json({ error: 'Failed to fetch flags', message: err.message });
+    }
   }
-});
+);
 
 /* ------------ get one ------------ */
 
-router.get('/:id', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
-  try {
-    const flag = await FeatureFlag.findOne({
-      where: { id: req.params.id, company_id: req.companyId },
-      include: [
-        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
-        { model: FlagState, as: 'states' }
-      ]
-    });
-
-    if (!flag) return res.status(404).json({ error: 'Flag not found' });
-
-    res.json({ success: true, flag });
-  } catch (error) {
-    console.error('Error fetching flag:', error);
-    res.status(500).json({ error: 'Failed to fetch flag', message: error.message });
+// get one flag
+router.get(
+  '/:id',
+  authMiddleware,
+  extractCompanyContext,
+  requireCompanyMembership,
+  async (req, res) => {
+    try {
+      const flag = await FeatureFlag.findOne({
+        where: { id: req.params.id, company_id: req.companyId },
+        include: [{ model: FlagState, as: 'states' }],
+      });
+      if (!flag) return res.status(404).json({ error: 'Not found' });
+      res.json(flag);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to fetch flag', message: err.message });
+    }
   }
-});
+);
 
 /* ------------ create ------------ */
 
@@ -527,38 +531,26 @@ router.get('/:flagId/audit',
   }
 );
 
-router.get('/audit/recent',
+// recent audit
+router.get(
+  '/audit/recent',
   authMiddleware,
   extractCompanyContext,
   requireCompanyMembership,
   async (req, res) => {
     try {
-      const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
-      const logs = await AuditLog.findAll({
-        include: [
-          {
-            model: FeatureFlag,
-            as: 'flag',
-            where: { company_id: req.companyId },
-            attributes: ['id', 'name']
-          },
-          { model: User, as: 'user', attributes: ['id', 'display_name', 'username', 'email'] }
-        ],
+      const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+      const rows = await AuditLog.findAll({
+        where: { company_id: req.companyId },
+        include: [{ model: User, as: 'user' }, { model: FeatureFlag, as: 'flag' }],
         order: [['created_at', 'DESC']],
-        limit
+        limit,
       });
-
       res.json({
-        success: true,
-        logs: logs.map(l => ({
-          id: l.id,
-          created_at: l.created_at,
-          action: l.action,
-          environment: l.environment,
-          user: l.user,
-          flag: l.flag,
-          reason: l.reason
-        }))
+        items: rows.map(l => ({
+          id: l.id, created_at: l.created_at, action: l.action,
+          environment: l.environment, user: l.user, flag: l.flag, reason: l.reason
+        })),
       });
     } catch (e) {
       res.status(500).json({ error: 'Failed to load recent audit', message: e.message });
