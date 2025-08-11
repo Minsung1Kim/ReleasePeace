@@ -157,7 +157,10 @@ function ActivityBell({ authedFetch }) {
 
 const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSwitchCompany }) => {
   // --- State ---
+  // local state that can change when user switches companies
   const [activeCompany, setActiveCompany] = useState(companyProp || null);
+  // 🔧 alias for legacy references scattered in JSX/handlers
+  const company = activeCompany || companyProp || null;
   const [showInvite, setShowInvite] = useState(false);
   const [showManageRoles, setShowManageRoles] = useState(false);
 
@@ -175,12 +178,12 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     if (typeof onSwitchCompany === 'function') onSwitchCompany(next);
   }
   const companyPathParam = () => {
-    const id = activeCompany?.id || '';
-    const sub = activeCompany?.subdomain || '';
+    const id = company?.id || '';
+    const sub = company?.subdomain || '';
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRe.test(id) ? id : (sub || id);
   };
-  const companyId = activeCompany?.id?.startsWith('company_') ? activeCompany.id.slice(8) : activeCompany?.id;
+  const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id;
   const [apiStatus, setApiStatus] = useState('checking...');
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -330,7 +333,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       console.error('Failed to fetch company members:', err);
     }
   } 
-  const userRole = activeCompany?.role || 'member'
+  const userRole = company?.role || 'member'
   const canCreate = ['owner','admin','pm'].includes(userRole)
   const canToggle = ['owner','admin','pm','engineer'].includes(userRole)
 
@@ -611,7 +614,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
               <ActivityBell authedFetch={authedFetch} />
 
               {/* Use correct button based on role */}
-              {['owner','admin'].includes(activeCompany?.role) ? (
+              {['owner','admin'].includes(company?.role) ? (
                 <>
                   <button type="button" onClick={() => setShowInvite(true)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Invite
@@ -782,7 +785,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                           {envStats.enabled}/{envStats.total} environments enabled
                         </div>
                         {/* ApprovalBadge under actions row */}
-                        <ApprovalBadge flagId={flag.id} companyId={activeCompany?.id} />
+                        <ApprovalBadge flagId={flag.id} companyId={company?.id} />
                       </div>
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">
@@ -876,17 +879,16 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       {/* New Invite Modal */}
       {showInvite && (
         <TeamViewerModal
-          open
-          companyId={activeCompany?.id}
+          open={showInvite}
+          companyId={company?.id}
           onClose={() => setShowInvite(false)}
         />
       )}
 
-      {/* New Manage Roles Modal */}
       {showManageRoles && (
         <ManageRolesModal
-          open
-          companyId={activeCompany?.id}
+          open={showManageRoles}
+          companyId={company?.id}
           onClose={() => setShowManageRoles(false)}
         />
       )}
