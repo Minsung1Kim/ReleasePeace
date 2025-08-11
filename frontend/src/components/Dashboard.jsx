@@ -568,11 +568,11 @@ function Dashboard({
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
               <ActivityBell authedFetch={authedFetch} />
 
-              {isOwnerOrAdmin ? (
+              {['owner','admin'].includes(company?.role) ? (
                 <>
                   <button
                     type="button"
-                    onClick={openInvite}
+                    onClick={() => { setShowInvite(true); setShowTeam(false); }}
                     disabled={!company?.id}
                     className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
                   >
@@ -589,7 +589,7 @@ function Dashboard({
                 </>
               ) : (
                 <button
-                  onClick={handleOpenTeam}
+                  onClick={() => { setShowTeam(true); setShowInvite(false); }}
                   disabled={!company?.id}
                   className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
                 >
@@ -842,34 +842,35 @@ function Dashboard({
         </div>
       </div>
 
-      {/* Invite modal */}
+
+      {/* Team (members) */}
+      {showTeam && (
+        <TeamViewerModal
+          open
+          companyId={companyId}
+          onClose={() => setShowTeam(false)}
+          tab="members"
+        />
+      )}
+
+      {/* Invite code */}
       {showInvite && (
-        <InviteCodePopover
-          companyId={company?.id}
-          companyName={company?.name}
+        <TeamViewerModal
+          open
+          companyId={companyId}
           onClose={() => setShowInvite(false)}
+          tab="invite"
         />
       )}
 
       {/* Manage Roles modal */}
-      {showTeam && (
-        <TeamViewerModal
+      {showManageRoles && (
+        <ManageRolesModal
           open
-          companyId={companyId}
-          loading={teamLoading || inviteLoading}
-          error={teamError || inviteError}
-          onClose={() => { setShowTeam(false); setTeamError(''); setInviteError(''); }}
-        />
-      )}
-
-      {/* Team modal */}
-      {showTeam && (
-        <TeamViewerModal
-          open
-          companyId={companyId}
-          loading={teamLoading || inviteLoading}
-          error={teamError || inviteError}
-          onClose={() => { setShowTeam(false); setTeamError(''); setInviteError(''); }}
+          companyId={company?.id}
+          members={members}
+          onRoleChange={handleRoleChange}
+          onClose={() => setShowManageRoles(false)}
         />
       )}
 

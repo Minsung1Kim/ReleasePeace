@@ -1,18 +1,19 @@
+
 import { useEffect, useState, useRef } from "react";
 import { apiRequest } from '../utils/api';
 
-export default function TeamViewerModal({ open, companyId, onClose }) {
+const TeamViewerModal = ({ open, companyId, onClose, tab = 'members' }) => {
   const overlayRef = useRef(null);
   const [code, setCode] = useState('');
 
   useEffect(() => {
-    if (!open || !companyId) return;
+    if (!open || !companyId || tab !== 'invite') return;
     apiRequest(`companies/${companyId}/invite-code`, {
       headers: { 'X-Company-Id': companyId }
     })
       .then(r => setCode(r.invite_code || r.inviteCode || ''))
       .catch(console.error);
-  }, [open, companyId]);
+  }, [open, companyId, tab]);
 
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose?.();
@@ -35,32 +36,50 @@ export default function TeamViewerModal({ open, companyId, onClose }) {
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
     >
       <div className="bg-white w-full max-w-xl rounded-2xl shadow-xl">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">Invite Code</h2>
-          <p className="text-xs text-gray-500 mt-1">Share this code to invite teammates</p>
-        </div>
+        {/* Invite Code Section */}
+        {tab === 'invite' && (
+          <>
+            <div className="p-4 border-b">
+              <h2 className="text-lg font-semibold">Invite Code</h2>
+              <p className="text-xs text-gray-500 mt-1">Share this code to invite teammates</p>
+            </div>
+            <div className="p-4">
+              <div className="mb-2">
+                <input
+                  readOnly
+                  value={code}
+                  className="w-full px-3 py-2 border rounded text-lg font-mono bg-gray-50"
+                />
+              </div>
+              <button
+                className="px-3 py-2 rounded border bg-blue-50 text-blue-700 mr-2"
+                onClick={regenerate}
+              >
+                Regenerate
+              </button>
+              <button
+                className="px-3 py-2 rounded border bg-gray-50 text-gray-700"
+                onClick={() => navigator.clipboard.writeText(code)}
+              >
+                Copy
+              </button>
+            </div>
+          </>
+        )}
 
-        <div className="p-4">
-          <div className="mb-2">
-            <input
-              readOnly
-              value={code}
-              className="w-full px-3 py-2 border rounded text-lg font-mono bg-gray-50"
-            />
-          </div>
-          <button
-            className="px-3 py-2 rounded border bg-blue-50 text-blue-700 mr-2"
-            onClick={regenerate}
-          >
-            Regenerate
-          </button>
-          <button
-            className="px-3 py-2 rounded border bg-gray-50 text-gray-700"
-            onClick={() => navigator.clipboard.writeText(code)}
-          >
-            Copy
-          </button>
-        </div>
+        {/* Members Section (placeholder) */}
+        {tab === 'members' && (
+          <>
+            <div className="p-4 border-b">
+              <h2 className="text-lg font-semibold">Team Members</h2>
+              <p className="text-xs text-gray-500 mt-1">List of team members will appear here.</p>
+            </div>
+            <div className="p-4">
+              {/* TODO: Render actual members list here */}
+              <div className="text-gray-500">Members view coming soon.</div>
+            </div>
+          </>
+        )}
 
         <div className="p-3 flex justify-end gap-2 border-t">
           <button className="px-4 py-2 rounded-lg border hover:bg-gray-50" onClick={() => onClose?.()}>
@@ -70,4 +89,6 @@ export default function TeamViewerModal({ open, companyId, onClose }) {
       </div>
     </div>
   );
-}
+};
+
+export default TeamViewerModal;
