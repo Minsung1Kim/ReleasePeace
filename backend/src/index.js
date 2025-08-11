@@ -298,89 +298,88 @@ app.get('/api/users', (req, res) => {
 // ========== FLAG ROUTES ==========
 app.use('/api/flags', require('./routes/flags'));
 
-// ========== FLAG ROUTES ==========
+// --- wrap the mock handlers so they don't collide in prod ---
+if (process.env.MOCK_API === '1') {
+  app.get('/api/flags', (req, res) => {
+    res.json({
+      success: true,
+      flags: [
+        {
+          id: 'flag_demo_1',
+          name: 'demo_feature_1',
+          description: 'Demo feature flag for testing',
+          flag_type: 'rollout',
+          risk_level: 'low',
+          tags: ['demo', 'test'],
+          created_by: 'demo_user',
+          creator: { username: 'demo_user', display_name: 'Demo User' },
+          states: [
+            { environment: 'development', is_enabled: true, rollout_percentage: 100 },
+            { environment: 'staging', is_enabled: true, rollout_percentage: 50 },
+            { environment: 'production', is_enabled: false, rollout_percentage: 0 }
+          ]
+        },
+        {
+          id: 'flag_demo_2',
+          name: 'demo_feature_2',
+          description: 'Another demo feature flag',
+          flag_type: 'experiment',
+          risk_level: 'medium',
+          tags: ['demo', 'experiment'],
+          created_by: 'demo_user',
+          creator: { username: 'demo_user', display_name: 'Demo User' },
+          states: [
+            { environment: 'development', is_enabled: true, rollout_percentage: 100 },
+            { environment: 'staging', is_enabled: false, rollout_percentage: 0 },
+            { environment: 'production', is_enabled: false, rollout_percentage: 0 }
+          ]
+        }
+      ],
+      total: 2,
+      message: 'Mock flags data',
+      company_id: 'demo_company'
+    });
+  });
 
-app.get('/api/flags', (req, res) => {
-  res.json({
-    success: true,
-    flags: [
-      {
-        id: 'flag_demo_1',
-        name: 'demo_feature_1',
-        description: 'Demo feature flag for testing',
-        flag_type: 'rollout',
-        risk_level: 'low',
-        tags: ['demo', 'test'],
-        created_by: 'demo_user',
-        creator: { username: 'demo_user', display_name: 'Demo User' },
+  app.post('/api/flags', (req, res) => {
+    const { name, description, flag_type, risk_level, tags } = req.body;
+    res.json({
+      success: true,
+      flag: {
+        id: `flag_${Date.now()}`,
+        name: name || 'new_flag',
+        description: description || 'New feature flag',
+        flag_type: flag_type || 'rollout',
+        risk_level: risk_level || 'medium',
+        tags: tags || [],
+        created_by: 'current_user',
+        creator: { username: 'current_user', display_name: 'Current User' },
         states: [
-          { environment: 'development', is_enabled: true, rollout_percentage: 100 },
-          { environment: 'staging', is_enabled: true, rollout_percentage: 50 },
-          { environment: 'production', is_enabled: false, rollout_percentage: 0 }
-        ]
-      },
-      {
-        id: 'flag_demo_2',
-        name: 'demo_feature_2',
-        description: 'Another demo feature flag',
-        flag_type: 'experiment',
-        risk_level: 'medium',
-        tags: ['demo', 'experiment'],
-        created_by: 'demo_user',
-        creator: { username: 'demo_user', display_name: 'Demo User' },
-        states: [
-          { environment: 'development', is_enabled: true, rollout_percentage: 100 },
+          { environment: 'development', is_enabled: false, rollout_percentage: 0 },
           { environment: 'staging', is_enabled: false, rollout_percentage: 0 },
           { environment: 'production', is_enabled: false, rollout_percentage: 0 }
         ]
-      }
-    ],
-    total: 2,
-    message: 'Mock flags data',
-    company_id: 'demo_company'
+      },
+      message: 'Mock flag creation'
+    });
   });
-});
 
-app.post('/api/flags', (req, res) => {
-  const { name, description, flag_type, risk_level, tags } = req.body;
-  
-  res.json({
-    success: true,
-    flag: {
-      id: `flag_${Date.now()}`,
-      name: name || 'new_flag',
-      description: description || 'New feature flag',
-      flag_type: flag_type || 'rollout',
-      risk_level: risk_level || 'medium',
-      tags: tags || [],
-      created_by: 'current_user',
-      creator: { username: 'current_user', display_name: 'Current User' },
-      states: [
-        { environment: 'development', is_enabled: false, rollout_percentage: 0 },
-        { environment: 'staging', is_enabled: false, rollout_percentage: 0 },
-        { environment: 'production', is_enabled: false, rollout_percentage: 0 }
-      ]
-    },
-    message: 'Mock flag creation'
+  app.put('/api/flags/:id/state/:environment', (req, res) => {
+    const { id, environment } = req.params;
+    const { is_enabled, rollout_percentage } = req.body;
+    res.json({
+      success: true,
+      flag_state: {
+        flag_id: id,
+        environment: environment,
+        is_enabled: is_enabled !== undefined ? is_enabled : false,
+        rollout_percentage: rollout_percentage || 0,
+        updated_by: 'current_user'
+      },
+      message: 'Mock flag state update'
+    });
   });
-});
-
-app.put('/api/flags/:id/state/:environment', (req, res) => {
-  const { id, environment } = req.params;
-  const { is_enabled, rollout_percentage } = req.body;
-  
-  res.json({
-    success: true,
-    flag_state: {
-      flag_id: id,
-      environment: environment,
-      is_enabled: is_enabled !== undefined ? is_enabled : false,
-      rollout_percentage: rollout_percentage || 0,
-      updated_by: 'current_user'
-    },
-    message: 'Mock flag state update'
-  });
-});
+}
 
 // ========== SDK ROUTES ==========
 
@@ -451,22 +450,11 @@ app.post('/sdk/track/:flagName', (req, res) => {
 
 // ========== ERROR HANDLING ==========
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  
-  res.status(err.status || 500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-    timestamp: new Date().toISOString()
-  });
-});
-
 // ✅ mount real companies router BEFORE 404
 const companiesRouter = require('./routes/companies');
 app.use('/api/companies', companiesRouter);
 
-// ❗ keep this LAST
+// ❗ keep 404 just above the error handler
 app.use('*', (req, res) => {
   res.status(404).json({
     error: 'Route not found',
@@ -481,6 +469,12 @@ app.use('*', (req, res) => {
       '/sdk'
     ]
   });
+});
+
+// 🔻 Move the error handler to be the very last middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(err.status || 500).json({ error: 'Internal server error', message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong', timestamp: new Date().toISOString() });
 });
 
 // ========== SERVER STARTUP ==========

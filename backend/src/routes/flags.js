@@ -4,28 +4,19 @@ const { authMiddleware } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
 
-// ✅ safe-import; if the file/export is missing, we no-op instead of crashing
-const { requireApprovalIfRisky } = (() => {
-  try { return require('../middleware/requireApproval'); }
-  catch { return { requireApprovalIfRisky: (req, res, next) => next() }; }
-})();
-
-// ✅ guard to ensure Express never receives `undefined` as a middleware
-const asMw = (name, fn) =>
-  (typeof fn === 'function'
-    ? fn
-    : (req, res, next) => {
-        console.warn(`[flags] missing middleware "${name}", skipping`);
-        next();
-      });
+// Safe-import for requireApprovalIfRisky
+let requireApprovalIfRisky = (req, res, next) => next();
+try {
+  requireApprovalIfRisky = require('../middleware/requireApproval').requireApprovalIfRisky || requireApprovalIfRisky;
+} catch {}
 
 const router = express.Router();
 
 // Safe audit logger import
-const { logAudit } = (() => {
-  try { return require('../services/auditService'); }
-  catch { return { logAudit: async () => {} }; }
-})();
+let logAudit = async () => {};
+try {
+  logAudit = require('../services/auditService').logAudit || logAudit;
+} catch {}
 
 const { FeatureFlag, FlagState, FlagApproval, AuditLog, User } = require('../models');
 const { Op } = require('sequelize');
@@ -53,47 +44,40 @@ async function writeAudit({ flagId, userId, action, oldState = null, newState = 
 /* ------------ list flags ------------ */
 
 // list flags
-router.get(
-  '/',
-  asMw('authMiddleware', authMiddleware),
-  asMw('extractCompanyContext', extractCompanyContext),
-  asMw('requireCompanyMembership', requireCompanyMembership),
-  async (req, res) => {
-    try {
-      const flags = await FeatureFlag.findAll({
-        where: { company_id: req.companyId },
-        include: [{ model: FlagState, as: 'states' }],
-        order: [['created_at', 'DESC']],
-      });
-      res.json({ success: true, flags, total: flags.length, company_id: req.companyId });
-    } catch (err) {
-      console.error('Error fetching flags:', err);
-      res.status(500).json({ error: 'Failed to fetch flags', message: err.message });
-    }
+router.get('/', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res, next) => {
+  try {
+    const flags = await FeatureFlag.findAll({
+      where: { company_id: req.companyId },
+      include: [
+        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
+        { model: FlagState, as: 'states' }
+      ],
+      order: [['created_at', 'DESC']],
+    });
+    res.json({ success: true, flags, total: flags.length, company_id: req.companyId });
+  } catch (err) {
+    next(err);
   }
-);
+});
 
 /* ------------ get one ------------ */
 
 // get one flag
-router.get(
-  '/:id',
-  asMw('authMiddleware', authMiddleware),
-  asMw('extractCompanyContext', extractCompanyContext),
-  asMw('requireCompanyMembership', requireCompanyMembership),
-  async (req, res) => {
-    try {
-      const flag = await FeatureFlag.findOne({
-        where: { id: req.params.id, company_id: req.companyId },
-        include: [{ model: FlagState, as: 'states' }],
-      });
-      if (!flag) return res.status(404).json({ error: 'Not found' });
-      res.json(flag);
-    } catch (err) {
-      res.status(500).json({ error: 'Failed to fetch flag', message: err.message });
-    }
+router.get('/:id', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res, next) => {
+  try {
+    const flag = await FeatureFlag.findOne({
+      where: { id: req.params.id, company_id: req.companyId },
+      include: [
+        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
+        { model: FlagState, as: 'states' }
+      ],
+    });
+    if (!flag) return res.status(404).json({ error: 'Not found' });
+    res.json(flag);
+  } catch (err) {
+    next(err);
   }
-);
+});
 
 /* ------------ create ------------ */
 
@@ -568,38 +552,21 @@ router.get('/:flagId/audit',
 );
 
 // recent audit
-router.get(
-  '/audit/recent',
-  asMw('authMiddleware', authMiddleware),
-  asMw('extractCompanyContext', extractCompanyContext),
-  asMw('requireCompanyMembership', requireCompanyMembership),
-  async (req, res) => {
-    try {
-      const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
-      const rows = await AuditLog.findAll({
-        include: [
-          { model: User, as: 'user' },
-          { model: FeatureFlag, as: 'flag', where: { company_id: req.companyId } }
-        ],
-        order: [['created_at', 'DESC']],
-        limit
-      });
-
-      res.json({
-        items: rows.map(l => ({
-          id: l.id,
-          created_at: l.created_at,
-          action: l.action,
-          environment: l.environment,
-          user: l.user,
-          flag: l.flag,
-          reason: l.reason
-        }))
-      });
-    } catch (e) {
-      res.status(500).json({ error: 'Failed to load recent audit', message: e.message });
-    }
+router.get('/audit/recent', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+    const rows = await AuditLog.findAll({
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'username', 'display_name'] },
+        { model: FeatureFlag, as: 'flag', where: { company_id: req.companyId }, attributes: ['id', 'name', 'company_id'] }
+      ],
+      order: [['created_at', 'DESC']],
+      limit
+    });
+    res.json({ items: rows });
+  } catch (e) {
+    next(e);
   }
-);
+});
 
 module.exports = router;

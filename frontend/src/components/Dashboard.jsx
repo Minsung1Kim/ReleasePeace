@@ -81,7 +81,7 @@ function ActivityBell({ authedFetch }) {
     setLoading(true);
     try {
       const res = await authedFetch(`/api/flags/audit/recent?limit=10`);
-      const data = await res.json();
+      const data = res;
       if (res.ok && data?.success) setLogs(data.logs || []);
     } finally {
       setLoading(false);
@@ -225,7 +225,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   async function loadPendingApprovals() {
     try {
       const res = await authedFetch(`/api/flags/approvals/pending?limit=100`);
-      const data = await res.json();
+      const data = res;
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load approvals');
       setPendingApprovals(data.pending || []);
     } catch (e) {
@@ -240,7 +240,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, comments })
     });
-    const data = await res.json();
+    const data = res;
     if (!res.ok || !data.success) {
       alert(data.message || 'Failed to update approval');
       return;
@@ -260,7 +260,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     setAuditLoading(true);
     try {
       const res = await authedFetch(`/api/flags/${flag.id}/audit?limit=200`);
-      const data = await res.json();
+      const data = res;
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load audit');
       setAuditRows(data.logs || []);
     } catch (e) {
@@ -325,7 +325,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   const fetchCompanyWithMembers = async () => {
     try {
       const res = await authedFetch(`/api/companies/${companyPathParam()}`);
-      const data = await res.json();
+      const data = res;
       if (data.success && data.company.members) {
         setCompanyMembers(data.company.members);
       }
@@ -418,7 +418,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   useEffect(() => {
     // Test API connection
     fetch(`${config.apiUrl}/health`)
-      .then(res => res.json())
+      .then(res => res)
       .then(() => setApiStatus('✅ Connected!'))
       .catch(() => setApiStatus('❌ Connection failed'));
 
@@ -456,7 +456,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         body: JSON.stringify({ new_role: newRole })
       })
 
-      const data = await res.json()
+      const data = res
       if (!data.success) throw new Error(data.error || 'Failed to update role')
 
       // Soft update for now — could refetch company later
@@ -474,7 +474,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         body: JSON.stringify(flagData)
       });
 
-      const data = await response.json();
+      const data = response;
 
       // accept either { success, flag } or just the flag
       const newFlag = data?.flag ?? data;
@@ -525,7 +525,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_enabled: enabling, reason })
       });
-      const data = await res.json();
+      const data = res;
 
       if (res.status === 403 && (data?.error || '').toLowerCase().includes('approval')) {
         // Offer to request approval
@@ -536,7 +536,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ approver_role: 'qa', comments })
           });
-          const reqData = await reqRes.json();
+          const reqData = reqRes;
           if (!reqRes.ok || !reqData.success) throw new Error(reqData.message || 'Failed to request approval');
           alert('Approval requested. QA/Legal/Admin can approve from Approvals panel.');
         }
@@ -822,7 +822,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ reason: why })
                                       });
-                                      const data = await res.json();
+                                      const data = res;
                                       if (!res.ok || !data.success) throw new Error(data.message || 'Rollback failed');
                                       await fetchFlags();
                                       alert('Rollback completed.');
