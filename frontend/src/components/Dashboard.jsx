@@ -155,18 +155,32 @@ function ActivityBell({ authedFetch }) {
   );
 }
 
-const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }) => {
+const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSwitchCompany }) => {
   // --- State ---
-  const [company, setCompany] = useState(null);
+  const [activeCompany, setActiveCompany] = useState(companyProp || null);
   const [showInvite, setShowInvite] = useState(false);
   const [showManageRoles, setShowManageRoles] = useState(false);
+
+  // keep local state in sync with the prop, and store for API headers
+  useEffect(() => {
+    setActiveCompany(companyProp || null);
+    if (companyProp?.id) localStorage.setItem('rp_company_id', companyProp.id);
+  }, [companyProp?.id]);
+
+  // used by your Switch Company UI (and any child needing a handler)
+  function handleSwitchCompany(next) {
+    if (!next) return;
+    setActiveCompany(next);
+    if (next?.id) localStorage.setItem('rp_company_id', next.id);
+    if (typeof onSwitchCompany === 'function') onSwitchCompany(next);
+  }
   const companyPathParam = () => {
-    const id = company?.id || '';
-    const sub = company?.subdomain || '';
+    const id = activeCompany?.id || '';
+    const sub = activeCompany?.subdomain || '';
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRe.test(id) ? id : (sub || id);
   };
-  const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id;
+  const companyId = activeCompany?.id?.startsWith('company_') ? activeCompany.id.slice(8) : activeCompany?.id;
   const [apiStatus, setApiStatus] = useState('checking...');
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -316,7 +330,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
       console.error('Failed to fetch company members:', err);
     }
   } 
-  const userRole = company?.role || 'member'
+  const userRole = activeCompany?.role || 'member'
   const canCreate = ['owner','admin','pm'].includes(userRole)
   const canToggle = ['owner','admin','pm','engineer'].includes(userRole)
 
@@ -597,7 +611,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               <ActivityBell authedFetch={authedFetch} />
 
               {/* Use correct button based on role */}
-              {['owner','admin'].includes(company?.role) ? (
+              {['owner','admin'].includes(activeCompany?.role) ? (
                 <>
                   <button type="button" onClick={() => setShowInvite(true)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Invite
@@ -768,7 +782,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                           {envStats.enabled}/{envStats.total} environments enabled
                         </div>
                         {/* ApprovalBadge under actions row */}
-                        <ApprovalBadge flagId={flag.id} companyId={company?.id} />
+                        <ApprovalBadge flagId={flag.id} companyId={activeCompany?.id} />
                       </div>
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">
@@ -863,7 +877,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
       {showInvite && (
         <TeamViewerModal
           open
-          companyId={company?.id}
+          companyId={activeCompany?.id}
           onClose={() => setShowInvite(false)}
         />
       )}
@@ -872,7 +886,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
       {showManageRoles && (
         <ManageRolesModal
           open
-          companyId={company?.id}
+          companyId={activeCompany?.id}
           onClose={() => setShowManageRoles(false)}
         />
       )}
