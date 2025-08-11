@@ -2,8 +2,6 @@
 export async function getInviteCode(companyId) {
   return apiRequest(`/api/companies/${companyId}/invite-code`);
 }
-export { apiRequest, ApiError };
-
 
 import { config } from '../config';
 
@@ -14,6 +12,15 @@ function buildUrl(path) {
   // If caller already passed /api/... don't double it
   const needsApi = !p.startsWith('/api/');
   return `${API_ORIGIN}${needsApi ? '/api' : ''}${p}`;
+}
+
+export class ApiError extends Error {
+  constructor(message, status, data) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.data = data
+  }
 }
 
 export async function apiRequest(path, { method = 'GET', body, headers = {} } = {}) {
@@ -150,5 +157,3 @@ export async function removeMember(companyId, userId) {
     method: 'DELETE',
   });
 }
-
-export { ApiError }
