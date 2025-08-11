@@ -127,17 +127,35 @@ function Dashboard({
   };
   const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
 
-  // fetch wrapper adds X-Company-Id automatically
-  const authedFetch = (path, opts = {}) => {
+  // Always get a fresh token for API calls
+  const getFreshToken = useCallback(async () => {
+    const auth = getAuth();
+    const u = auth.currentUser;
+    if (!u) return null;
+    try {
+      // force refresh
+      return await u.getIdToken(true);
+    } catch {
+      // fallback
+      return await u.getIdToken();
+    }
+  }, []);
+
+  // fetch wrapper with fresh token and X-Company-Id
+  const authedFetch = useCallback(async (path, opts = {}) => {
     const id = company?.id || localStorage.getItem('rp_company_id') || undefined;
+    const t = (typeof getToken === 'function')
+      ? await getToken(true)
+      : await getFreshToken();
     return api.apiRequest(path, {
       ...opts,
       headers: {
+        Authorization: t ? `Bearer ${t}` : undefined,
         ...(opts.headers || {}),
         ...(id ? { 'X-Company-Id': id } : {}),
       },
     });
-  };
+  }, [company?.id, getToken, getFreshToken]);
 
   const safeJsonGet = async (res) => { try { return await res.json(); } catch { return null; } };
 
@@ -199,7 +217,7 @@ function Dashboard({
       if (!u) return;
       try { await u.getIdToken(true); } catch {}
       try {
-        const mine = await companies.getMine();
+        const mine = await authedFetch('/api/companies/mine');
         setActiveCompany(mine);
         if (mine?.id) {
           localStorage.setItem('rp_company_id', mine.id);
@@ -215,7 +233,7 @@ function Dashboard({
     let timer;
     const syncRole = async () => {
       try {
-        const resp = await api.companies.getMine(); // { companies } or single
+        const resp = await authedFetch('/api/companies/mine');
         const list = resp?.companies || (resp ? [resp] : []);
         const latest = list.find(c => c.id === company?.id);
         if (latest && latest.role && latest.role !== company?.role) {
@@ -243,9 +261,7 @@ function Dashboard({
   const fetchFlags = async () => {
     try {
       setLoading(true);
-      const data = await api.apiRequest('/api/flags', {
-        headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
-      });
+      const data = await authedFetch('/api/flags');
       setFlags(data.flags ?? data ?? []);
     } catch (err) {
       setError(err.message);
@@ -258,9 +274,7 @@ function Dashboard({
   const loadRecent = async () => {
     setRecentLoading(true);
     try {
-      const audit = await api.apiRequest('/api/flags/audit/recent?limit=20', {
-        headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
-      });
+      const audit = await authedFetch('/api/flags/audit/recent?limit=20');
       setRecent(audit.items ?? audit.logs ?? []);
     } catch (e) {
       console.error(e);
