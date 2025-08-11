@@ -170,11 +170,45 @@ function Dashboard({
   company: companyProp,
   onSwitchCompany, // callback provided by parent
 }) {
-  // company state (+ alias so older code can use `company`)
-  const [activeCompany, setActiveCompany] = useState(companyProp || null);
-  const company = activeCompany || companyProp || null;
+  // ---------- STATE HOOKS (top of component) ----------
+  const [activeCompany, setActiveCompany] = useState(null);
+  const [flags, setFlags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [activeEnvironment, setActiveEnvironment] = useState('production');
+  const [showCreateFlag, setShowCreateFlag] = useState(false);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRows, setAuditRows] = useState([]);
+  const [auditForFlag, setAuditForFlag] = useState(null);
+  const [showTeam, setShowTeam] = useState(false);          // TeamViewerModal
+  const [manageRolesOpen, setManageRolesOpen] = useState(false); // ManageRolesModal
+  const [members, setMembers] = useState([]);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamError, setTeamError] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [recent, setRecent] = useState([]);
+  const [apiStatus, setApiStatus] = useState('checking...');
 
-  // Pick the right company object from the API responses
+  // ---------- DERIVED VALUES ----------
+  const company = activeCompany || companyProp || null;
+  const userRole = company?.role || 'member';
+  const canCreate = ['owner','admin','pm'].includes(userRole);
+  const canToggle = ['owner','admin','pm','engineer'].includes(userRole);
+  const environments = ['development', 'staging', 'production'];
+  const companyPathParam = () => {
+    const id = company?.id || '';
+    const sub = company?.subdomain || '';
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRe.test(id) ? id : (sub || id);
+  };
+  const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
+
+  // ---------- HELPERS & CALLBACKS ----------
   const normalizeCompany = (resp) => {
     if (!resp) return null;
     if (resp.id) return resp;                                   // already a company
@@ -188,7 +222,36 @@ function Dashboard({
     return null;
   };
 
-  // Load the active company (and expand to full detail)
+  const getFreshToken = useCallback(async () => {
+    const auth = getAuth();
+    const u = auth.currentUser;
+    if (!u) return null;
+    try {
+      // force refresh
+      return await u.getIdToken(true);
+    } catch {
+      // fallback
+      return await u.getIdToken();
+    }
+  }, []);
+
+  const authedFetch = useCallback(async (path, opts = {}) => {
+    const id = company?.id || localStorage.getItem('rp_company_id') || undefined;
+    const t = (typeof getToken === 'function')
+      ? await getToken(true)
+      : await getFreshToken();
+    return api.apiRequest(path, {
+      ...opts,
+      headers: {
+        Authorization: t ? `Bearer ${t}` : undefined,
+        ...(opts.headers || {}),
+        ...(id ? { 'X-Company-Id': id } : {}),
+      },
+    });
+  }, [company?.id, getToken, getFreshToken]);
+
+  const safeJsonGet = async (res) => { try { return await res.json(); } catch { return null; } };
+
   const loadActiveCompany = React.useCallback(async () => {
     try {
       // who am I a member of?
@@ -207,85 +270,6 @@ function Dashboard({
       console.warn('loadActiveCompany failed', e);
     }
   }, [authedFetch]);
-
-  // persisted id helpers
-  const companyPathParam = () => {
-    const id = company?.id || '';
-    const sub = company?.subdomain || '';
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return uuidRe.test(id) ? id : (sub || id);
-  };
-  const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
-
-  // Always get a fresh token for API calls
-  const getFreshToken = useCallback(async () => {
-    const auth = getAuth();
-    const u = auth.currentUser;
-    if (!u) return null;
-    try {
-      // force refresh
-      return await u.getIdToken(true);
-    } catch {
-      // fallback
-      return await u.getIdToken();
-    }
-  }, []);
-
-  // fetch wrapper with fresh token and X-Company-Id
-  const authedFetch = useCallback(async (path, opts = {}) => {
-    const id = company?.id || localStorage.getItem('rp_company_id') || undefined;
-    const t = (typeof getToken === 'function')
-      ? await getToken(true)
-      : await getFreshToken();
-    return api.apiRequest(path, {
-      ...opts,
-      headers: {
-        Authorization: t ? `Bearer ${t}` : undefined,
-        ...(opts.headers || {}),
-        ...(id ? { 'X-Company-Id': id } : {}),
-      },
-    });
-  }, [company?.id, getToken, getFreshToken]);
-
-  const safeJsonGet = async (res) => { try { return await res.json(); } catch { return null; } };
-
-  // header/API status
-  const [apiStatus, setApiStatus] = useState('checking...');
-
-  // flags
-  const [flags, setFlags] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [activeEnvironment, setActiveEnvironment] = useState('production');
-  const [showCreateFlag, setShowCreateFlag] = useState(false);
-
-  // approvals & audit
-  const [approvalsOpen, setApprovalsOpen] = useState(false);
-  const [pendingApprovals, setPendingApprovals] = useState([]);
-  const [auditOpen, setAuditOpen] = useState(false);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [auditRows, setAuditRows] = useState([]);
-  const [auditForFlag, setAuditForFlag] = useState(null);
-
-  // team / roles modals
-  const [showTeam, setShowTeam] = useState(false);          // TeamViewerModal
-  const [manageRolesOpen, setManageRolesOpen] = useState(false); // ManageRolesModal
-  const [members, setMembers] = useState([]);
-  const [teamLoading, setTeamLoading] = useState(false);
-  const [teamError, setTeamError] = useState('');
-
-  // invite (we use TeamViewerModal for team/invite; keeping invite state in case your modal reads it)
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-
-  // recent list (top bell)
-  const [recentLoading, setRecentLoading] = useState(false);
-  const [recent, setRecent] = useState([]);
-
-  const userRole = company?.role || 'member';
-  const canCreate = ['owner','admin','pm'].includes(userRole);
-  const canToggle = ['owner','admin','pm','engineer'].includes(userRole);
-  const environments = ['development', 'staging', 'production'];
 
   // ---------- boot & company sync ----------
   useEffect(() => {
