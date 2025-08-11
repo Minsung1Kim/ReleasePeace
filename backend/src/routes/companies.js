@@ -3,7 +3,12 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 
-const { requireAuth } = require('../middleware/auth');
+// Defensive import for authMiddleware
+const authModule = require('../middleware/auth.js');
+const authMiddleware = authModule && typeof authModule.authMiddleware === 'function'
+  ? authModule.authMiddleware
+  : (() => { throw new Error('authMiddleware is not exported from middleware/auth.js'); })();
+
 const {
   extractCompanyContext,
   requireCompanyMembership,
@@ -19,9 +24,7 @@ function genCode() {
   return crypto.randomBytes(8).toString('base64url').slice(0, 12);
 }
 
-/* ---------------------------
-   COMPANIES: LIST / CREATE / JOIN
----------------------------- */
+
 
 // List companies for current user (must be before "/:companyId")
 router.get('/mine', requireAuth, async (req, res, next) => {
