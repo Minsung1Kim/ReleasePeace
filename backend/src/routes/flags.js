@@ -63,7 +63,44 @@ async function writeAudit({ flagId, userId, action, oldState = null, newState = 
   }
 }
 
+
 /* ------------ list flags ------------ */
+
+
+// GET /api/flags/audit/recent?limit=20
+router.get('/audit/recent', authMiddleware, extractCompanyContext, async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
+    const logs = await AuditLog.findAll({
+      include: [
+        { model: FeatureFlag, as: 'flag', where: { company_id: req.companyId }, attributes: ['id','name','company_id'] },
+        { model: User, as: 'user', attributes: ['id','username','display_name'] },
+      ],
+      order: [['created_at','DESC']],
+      limit,
+    });
+    res.json({ items: logs });
+  } catch (e) { next(e); }
+});
+
+// GET /api/flags/:id/audit?limit=200
+router.get('/:id/audit', authMiddleware, extractCompanyContext, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const limit = Math.min(parseInt(req.query.limit || '100', 10), 500);
+
+    const flag = await FeatureFlag.findOne({ where: { id, company_id: req.companyId } });
+    if (!flag) return res.status(404).json({ error: 'flag not found' });
+
+    const logs = await AuditLog.findAll({
+      where: { flag_id: id },
+      include: [{ model: User, as: 'user', attributes: ['id','username','display_name'] }],
+      order: [['created_at','DESC']],
+      limit,
+    });
+    res.json({ items: logs });
+  } catch (e) { next(e); }
+});
 
 // list flags
 router.get('/',
@@ -583,22 +620,6 @@ router.get('/:flagId/audit',
   }
 );
 
-// recent audit
-router.get('/audit/recent', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res, next) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
-    const rows = await AuditLog.findAll({
-      include: [
-        { model: User, as: 'user', attributes: ['id', 'username', 'display_name'] },
-        { model: FeatureFlag, as: 'flag', where: { company_id: req.companyId }, attributes: ['id', 'name', 'company_id'] }
-      ],
-      order: [['created_at', 'DESC']],
-      limit
-    });
-    res.json({ items: rows });
-  } catch (e) {
-    next(e);
-  }
-});
+// ...existing code...
 
 module.exports = router;

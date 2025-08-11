@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getAuth, onIdTokenChanged } from 'firebase/auth';
-import { companies, getCompanyMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
+import { companies, getMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
 import * as api from '../utils/api';
 import { config } from '../config';
 import ManageRolesModal from './ManageRolesModal.jsx';
@@ -80,9 +80,8 @@ function ActivityBell({ authedFetch }) {
   async function load() {
     setLoading(true);
     try {
-      const res = await authedFetch(`/api/flags/audit/recent?limit=10`);
-      const data = res;
-      if (res.ok && data?.success) setLogs(data.logs || []);
+      const data = await authedFetch(`/api/flags/audit/recent?limit=10`);
+      setLogs(data.items || data.logs || []); // backend returns { items: [...] }
     } finally {
       setLoading(false);
     }
@@ -159,6 +158,13 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   // --- State ---
   // local state that can change when user switches companies
   const [activeCompany, setActiveCompany] = useState(companyProp || null);
+  // Hydrate company from localStorage once on mount
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
+      if (saved?.id) setActiveCompany(saved);
+    } catch {}
+  }, []);
   // 🔧 alias for legacy references scattered in JSX/handlers
   const company = activeCompany || companyProp || null;
   const [showInvite, setShowInvite] = useState(false);
@@ -174,7 +180,10 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   function handleSwitchCompany(next) {
     if (!next) return;
     setActiveCompany(next);
-    if (next?.id) localStorage.setItem('rp_company_id', next.id);
+    if (next?.id) {
+      localStorage.setItem('rp_company_id', next.id);
+      localStorage.setItem('releasepeace_company', JSON.stringify(next));
+    }
     if (typeof onSwitchCompany === 'function') onSwitchCompany(next);
   }
   const companyPathParam = () => {
@@ -183,7 +192,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRe.test(id) ? id : (sub || id);
   };
-  const companyId = company?.id ?? localStorage.getItem('rp_company_id') ?? undefined;
+  const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
   const [apiStatus, setApiStatus] = useState('checking...');
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -224,9 +233,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   // Approvals helpers
   async function loadPendingApprovals() {
     try {
-      const res = await authedFetch(`/api/flags/approvals/pending?limit=100`);
-      const data = res;
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load approvals');
+      const data = await authedFetch(`/api/flags/approvals/pending?limit=100`);
       setPendingApprovals(data.pending || []);
     } catch (e) {
       alert(e.message || 'Failed to load approvals');
@@ -235,13 +242,12 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
 
   async function decideApproval(flagId, approvalId, status) {
     const comments = window.prompt(`${status.toUpperCase()} — add a note (optional):`) || '';
-    const res = await authedFetch(`/api/flags/${flagId}/approvals/${approvalId}`, {
+    const data = await authedFetch(`/api/flags/${flagId}/approvals/${approvalId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, comments })
     });
-    const data = res;
-    if (!res.ok || !data.success) {
+    if (!data.success) {
       alert(data.message || 'Failed to update approval');
       return;
     }
@@ -259,10 +265,8 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     setAuditOpen(true);
     setAuditLoading(true);
     try {
-      const res = await authedFetch(`/api/flags/${flag.id}/audit?limit=200`);
-      const data = res;
-      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load audit');
-      setAuditRows(data.logs || []);
+      const data = await authedFetch(`/api/flags/${flag.id}/audit?limit=200`);
+      setAuditRows(data.items || data.logs || []);
     } catch (e) {
       alert(e.message || 'Failed to load audit');
     } finally {
@@ -273,7 +277,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   // Helpers for member modals
   async function refreshMembers() {
     try {
-      const list = await api.getCompanyMembers(company.id);
+      const list = await getMembers(company?.id);
       setMembers(list || []);
     } catch (e) {
       console.error('load members failed', e);
@@ -286,41 +290,31 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   }
 
   async function openTeam() {
-    await refreshMembers();
-    setTeamOpen(true);
-  }
-
-  // Always use a fresh Firebase ID token and retry once on 401
-  const authedFetch = async (path, opts = {}, retry = true) => {
-    // get a fresh token if possible
-    let t = token
     try {
-      if (getToken) t = await getToken()
-    } catch (_) {}
-
-    const headers = {
-      ...(opts.headers || {}),
-      Authorization: `Bearer ${t}`,
-      'X-Company-ID': company?.id || company?.subdomain || 'demo'
-    }
-
-    const res = await fetch(`${config.apiUrl}${path}`, { ...opts, headers })
-
-    // If token expired, refresh and retry once
-    if (res.status === 401 && retry && getToken) {
-      try {
-        const fresh = await getToken()
-        const res2 = await fetch(`${config.apiUrl}${path}`, {
-          ...opts,
-          headers: { ...(opts.headers || {}), Authorization: `Bearer ${fresh}`, 'X-Company-ID': headers['X-Company-ID'] }
-        })
-        return res2
-      } catch (_) {
-        // fall through to original res
+      const list = await getMembers(company?.id);
+      setMembers(list || []);
+      setTeamOpen(true);
+    } catch (e) {
+      if (e?.message === 'No company selected') {
+        // show a toast or modal
+        console.warn('No company selected');
+        return;
       }
+      console.error('load members failed', e);
     }
-    return res
   }
+
+  // Always parsed JSON, with X-Company-Id from state or localStorage
+  const authedFetch = (path, opts = {}) => {
+    const id = company?.id || localStorage.getItem('rp_company_id') || undefined;
+    return api.apiRequest(path, {
+      ...opts,
+      headers: {
+        ...(opts.headers || {}),
+        ...(id ? { 'X-Company-Id': id } : {}), // no 'demo' fallback
+      },
+    });
+  };
   // Fetch company with members for modal
   const fetchCompanyWithMembers = async () => {
     try {
@@ -358,12 +352,6 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
     return () => clearInterval(timer);
   }, [company?.id]);
 
-  function handleSwitchCompany(next) {
-    if (!next) return;
-    setActiveCompany(next);
-    if (next?.id) localStorage.setItem('rp_company_id', next.id);
-    // TODO: reload any data that depends on company here (flags, members, etc.)
-  }
   // --- Token warmup + load company effect ---
   useEffect(() => {
     const auth = getAuth();
@@ -373,7 +361,10 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         try {
           const mine = await companies.getMine();
           setActiveCompany(mine);
-          if (mine?.id) localStorage.setItem('rp_company_id', mine.id);
+          if (mine?.id) {
+            localStorage.setItem('rp_company_id', mine.id);
+            localStorage.setItem('releasepeace_company', JSON.stringify(mine));
+          }
         } catch (e) { console.error('load company failed', e); }
       }
     });
@@ -408,6 +399,7 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         if (mine?.id) {
           setActiveCompany(mine);
           localStorage.setItem('rp_company_id', mine.id);
+          localStorage.setItem('releasepeace_company', JSON.stringify(mine));
         }
       } catch (e) {
         console.error('load company failed', e);
@@ -468,18 +460,16 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
 
   const createFlag = async (flagData) => {
     try {
-      const response = await authedFetch('/api/flags', {
+      const data = await authedFetch('/api/flags', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(flagData)
       });
 
-      const data = response;
-
       // accept either { success, flag } or just the flag
-      const newFlag = data?.flag ?? data;
+      const newFlag = data.flag || data;
 
-      if (!response.ok || (!data?.success && !newFlag?.id)) {
+      if (!data?.success && !newFlag?.id) {
         throw new Error(data?.message || 'Failed to create flag');
       }
 
@@ -520,31 +510,15 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
         }
       }
 
-      const res = await authedFetch(`/api/flags/${flagId}/state/${environment}`, {
+      const data = await authedFetch(`/api/flags/${flagId}/state/${environment}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_enabled: enabling, reason })
       });
-      const data = res;
 
-      if (res.status === 403 && (data?.error || '').toLowerCase().includes('approval')) {
-        // Offer to request approval
-        if (window.confirm('Approval required. Request QA approval now?')) {
-          const comments = window.prompt('Context for approver (optional):') || '';
-          const reqRes = await authedFetch(`/api/flags/${flagId}/approvals`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ approver_role: 'qa', comments })
-          });
-          const reqData = reqRes;
-          if (!reqRes.ok || !reqData.success) throw new Error(reqData.message || 'Failed to request approval');
-          alert('Approval requested. QA/Legal/Admin can approve from Approvals panel.');
-        }
-        return;
-      }
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || data.error || 'Failed to update flag state');
+      // server returns { error: 'Approval required' } with 403 → apiRequest would have thrown.
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to update flag state');
       }
 
       await fetchFlags();
