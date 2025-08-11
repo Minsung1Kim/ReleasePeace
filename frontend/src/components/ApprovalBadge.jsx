@@ -10,7 +10,7 @@ export default function ApprovalBadge({ flagId, flagKey }) {
   async function refresh() {
     if (!idOrKey) return; // <- hard guard
     try {
-      const data = await apiRequest(`/flags/${idOrKey}/approvals`);
+      const data = await apiRequest(`/api/flags/${idOrKey}/approvals`);
       setItems(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error('approvals refresh failed', e);
@@ -23,7 +23,7 @@ export default function ApprovalBadge({ flagId, flagKey }) {
     if (!idOrKey) return;
     setLoading(true);
     try {
-      await apiRequest(`/flags/${idOrKey}/approvals`, { method: 'POST', body: {} });
+      await apiRequest(`/api/flags/${idOrKey}/approvals`, { method: 'POST', body: {} });
       await refresh();
     } finally {
       setLoading(false);

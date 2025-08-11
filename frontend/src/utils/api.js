@@ -1,4 +1,5 @@
 
+import { config } from '../config';
 import { getAuth } from 'firebase/auth';
 
 // Get invite code for a company
@@ -15,38 +16,79 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest(path, { method = 'GET', body, headers = {} } = {}) {
-  const base = (import.meta.env.VITE_API_BASE || 'https://releasepeace-production.up.railway.app').replace(/\/$/, '');
-  const url = `${base}/${String(path).replace(/^\//, '')}`;
+export async function apiRequest(endpoint, { method = 'GET', body, headers = {} } = {}) {
+  // Build a safe path: ensure it starts with /api/ exactly once
+  const clean = String(endpoint || '');
+  const path = clean.startsWith('/api/')
+    ? clean
+    : '/api' + (clean.startsWith('/') ? clean : `/${clean}`);
 
+  const url = `${config.apiUrl.replace(/\/$/, '')}${path}`;
+
+  // Add auth token (Firebase preferred; fall back to local JWT)
   const auth = getAuth();
   const user = auth.currentUser;
-  let token = user ? await user.getIdToken() : null;
+  let token = null;
+  try {
+    token = user ? await user.getIdToken() : null;
+  } catch (_) { /* ignore */ }
 
-  async function doFetch(tkn) {
-    const res = await fetch(url, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(tkn ? { Authorization: `Bearer ${tkn}` } : {}),
-        ...headers,
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      credentials: 'include',
-    });
-    return res;
+  if (!token) {
+    // fallback to your existing local token if you store one
+    const stored = localStorage.getItem('releasepeace_token');
+    if (stored) token = stored;
   }
 
-  let res = await doFetch(token);
+  const defaultOptions = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  };
 
-  // if token expired, refresh once and retry
-  if (res.status === 401 && user) {
-    token = await user.getIdToken(true);
-    res = await doFetch(token);
+  const mergedOptions = {
+    ...defaultOptions,
+    ...options,
+    headers: {
+      ...defaultOptions.headers,
+      ...headers,
+    },
+    method,
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'include',
+  };
+
+  try {
+    let response = await fetch(url, mergedOptions);
+
+    // If Firebase token expired, refresh once and retry
+    if (response.status === 401 && user) {
+      try {
+        const fresh = await user.getIdToken(true);
+        const retried = await fetch(url, {
+          ...mergedOptions,
+          headers: {
+            ...mergedOptions.headers,
+            Authorization: `Bearer ${fresh}`,
+          },
+        });
+        response = retried;
+      } catch (_) { /* ignore */ }
+    }
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new ApiError(
+        data.message || `HTTP ${response.status}`,
+        response.status,
+        data
+      );
+    }
+    return data;
+  } catch (err) {
+    // (keep your existing error handling or rethrow)
+    throw err;
   }
-
-  if (!res.ok) throw new Error(String(res.status));
-  return res.status === 204 ? null : res.json();
 }
 
 // Auth API calls
