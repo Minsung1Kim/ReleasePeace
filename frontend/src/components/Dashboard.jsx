@@ -183,9 +183,9 @@ function Dashboard({
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditRows, setAuditRows] = useState([]);
   const [auditForFlag, setAuditForFlag] = useState(null);
-  const [showTeam, setShowTeam] = useState(false);          // TeamViewerModal
-  const [showInvite, setShowInvite] = useState(false);      // Invite modal
-  const [showManageRoles, setShowManageRoles] = useState(false); // ManageRolesModal
+  const [showInvite, setShowInvite] = useState(false);
+  const [showTeam, setShowTeam] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
   const [members, setMembers] = useState([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
@@ -203,14 +203,12 @@ function Dashboard({
   const isOwnerOrAdmin = ['owner', 'admin'].includes(effectiveRole);
   const canCreate = ['owner','admin','pm'].includes(effectiveRole);
   const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
-  const canInvite = effectiveRole === 'owner' || effectiveRole === 'admin';
+  const canManage = effectiveRole === 'owner' || effectiveRole === 'admin';
   const environments = ['development', 'staging', 'production'];
-  // Invite and Manage Roles handlers
-  const openInvite = () => setShowInvite(true);
-  const openManageRoles = async () => {
-    await refreshMembers();
-    setShowManageRoles(true);
-  };
+  // Modal handlers
+  const openInvite = () => { setShowInvite(true); setShowTeam(false); setRolesOpen(false); };
+  const openTeam   = () => { setShowTeam(true);   setShowInvite(false); setRolesOpen(false); };
+  const openRoles  = () => { setRolesOpen(true);  setShowInvite(false); setShowTeam(false);  };
   const handleOpenTeam = useCallback(async () => {
     if (!company?.id) {
       setTeamError('Select or create a company first.');
@@ -577,26 +575,32 @@ function Dashboard({
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
               <ActivityBell authedFetch={authedFetch} />
 
-              {canInvite && (
-                <button
-                  type="button"
-                  onClick={() => { setShowInvite(true); setShowTeam(false); }}
-                  disabled={!company?.id}
-                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                >
-                  Invite
-                </button>
+              {canManage && (
+                <>
+                  <button
+                    onClick={openInvite}
+                    disabled={!company?.id}
+                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                  >
+                    Invite
+                  </button>
+                  <button
+                    onClick={openRoles}
+                    disabled={!company?.id}
+                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                  >
+                    Manage Roles
+                  </button>
+                </>
               )}
-              {/* Team button always available for non-owners/admins */}
-              {!canInvite && (
-                <button
-                  onClick={() => { setShowTeam(true); setShowInvite(false); }}
-                  disabled={!company?.id}
-                  className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                >
-                  Team
-                </button>
-              )}
+
+              <button
+                onClick={openTeam}
+                disabled={!company?.id}
+                className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+              >
+                Team
+              </button>
 
               {['qa','legal','owner','admin'].includes(user?.role) && (
                 <button
@@ -844,34 +848,32 @@ function Dashboard({
       </div>
 
 
-      {/* Team (members) */}
-      {showTeam && (
-        <TeamViewerModal
-          open
-          companyId={companyId}
-          onClose={() => setShowTeam(false)}
-          tab="members"
-        />
-      )}
-
-      {/* Invite code */}
+      {/* Invite modal */}
       {showInvite && (
         <TeamViewerModal
           open
           companyId={companyId}
-          onClose={() => setShowInvite(false)}
           tab="invite"
+          onClose={() => setShowInvite(false)}
+        />
+      )}
+
+      {/* Team modal */}
+      {showTeam && (
+        <TeamViewerModal
+          open
+          companyId={companyId}
+          tab="members"
+          onClose={() => setShowTeam(false)}
         />
       )}
 
       {/* Manage Roles modal */}
-      {showManageRoles && (
+      {rolesOpen && (
         <ManageRolesModal
           open
-          companyId={company?.id}
-          members={members}
-          onRoleChange={handleRoleChange}
-          onClose={() => setShowManageRoles(false)}
+          companyId={companyId}
+          onClose={() => setRolesOpen(false)}
         />
       )}
 
