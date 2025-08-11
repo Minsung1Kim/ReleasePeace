@@ -202,7 +202,9 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   async function loadRecent() {
     setRecentLoading(true);
     try {
-      const res = await authedFetch(`/api/flags/audit/recent?limit=20`);
+      const res = await api.apiRequest('/api/flags/audit/recent?limit=20', {
+        headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
+      });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load recent activity');
       setRecent(data.logs || []);
@@ -433,7 +435,9 @@ const Dashboard = ({ user, company: companyProp, token, getToken, onLogout, onSw
   const fetchFlags = async () => {
     try {
       setLoading(true)
-      const response = await authedFetch('/api/flags')
+      const response = await api.apiRequest('/api/flags', {
+        headers: { 'X-Company-Id': (company?.id || localStorage.getItem('rp_company_id')) }
+      });
       const data = await response.json()
       if (data.success) {
         setFlags(data.flags || [])

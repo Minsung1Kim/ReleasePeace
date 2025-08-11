@@ -1,130 +1,51 @@
 // backend/src/middleware/company.js - COMPLETE FILE
-const { Company, User, UserCompany } = require('../models');
+const { Company } = require('../models');
 const logger = (() => { try { return require('../utils/logger'); } catch { return console; } })();
 
-/**
- * Extract company context from request
- */
-const extractCompanyContext = async (req, res, next) => {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+async function extractCompanyContext(req, res, next) {
   try {
-    let companyId = null;
+    const headerId      = req.header('X-Company-Id');
+    const headerDomain  = req.header('X-Company-Domain') || req.header('X-Company-Subdomain');
+    const paramId       = req.params.companyId;
 
-    // Strategy 1: X-Company-ID header
-    if (req.headers['x-company-id']) {
-      companyId = req.headers['x-company-id'];
+    // Try header/param UUID first
+    let company = null;
+    const tryId = headerId || paramId;
+    if (tryId && UUID_RE.test(String(tryId))) {
+      company = await Company.findByPk(tryId);
     }
 
-    // Strategy 2: JWT token contains company info (if user is authenticated)
-    if (!companyId && req.user && req.user.company_id) {
-      companyId = req.user.company_id;
-    }
+    // If not found, try subdomain/domain from header or host
+    if (!company) {
+      const host = (req.headers.host || '').toLowerCase();
+      const fromHeader = (headerDomain || '').toLowerCase() || null;
 
-    // Strategy 3: Subdomain
-    if (!companyId) {
-      const host = req.get('host');
+      // parse subdomain like acme.release-peace.vercel.app
+      let sub = null;
       if (host) {
-        const subdomain = host.split('.')[0];
-        if (subdomain && subdomain !== 'www' && subdomain !== 'api' && subdomain !== 'localhost') {
-          // Look up company by subdomain
-          const company = await Company.findOne({ 
-            where: { subdomain, is_active: true } 
-          });
-          if (company) {
-            companyId = company.id;
-          }
-        }
+        const parts = host.split('.');
+        if (parts.length > 2) sub = parts[0];
+      }
+      const key = fromHeader || sub;
+
+      if (key) {
+        company = await Company.findOne({ where: { subdomain: key } })
+               || await Company.findOne({ where: { domain: key } });
       }
     }
 
-    if (!companyId) {
-      return res.status(400).json({
-        error: 'Company context required',
-        message: 'Please provide X-Company-ID header or access via company subdomain'
-      });
+    if (!company) {
+      return res.status(400).json({ error: 'Failed to resolve company context' });
     }
 
-    // Verify company exists and is active
-    const company = await Company.findByPk(companyId);
-    if (!company || !company.is_active) {
-      return res.status(404).json({
-        error: 'Company not found',
-        message: 'Invalid company or company is inactive'
-      });
-    }
-
-    // Set company context
     req.company = company;
     req.companyId = company.id;
-    req.company_id = company.id;
-
-    logger.debug('Company context set', {
-      companyId: company.id,
-      companyName: company.name,
-      userId: req.user?.id
-    });
-
-    next();
-  } catch (error) {
-    logger.error('Company context error:', error);
-    res.status(500).json({
-      error: 'Company resolution failed',
-      message: 'Failed to resolve company context'
-    });
+    return next();
+  } catch (e) {
+    logger.error('extractCompanyContext error:', e);
+    return res.status(500).json({ error: 'Company context error' });
   }
-};
-
-/**
- * Optional company context for public endpoints
- */
-const optionalCompanyContext = async (req, res, next) => {
-  try {
-    await extractCompanyContext(req, res, next);
-  } catch (error) {
-    // Don't fail for optional context
-    next();
-  }
-};
-
-/**
- * Ensure user belongs to the current company
- */
-const requireCompanyMembership = async (req, res, next) => {
-  try {
-    if (!req.user || !req.companyId) {
-      return res.status(401).json({
-        error: 'Authentication required',
-        message: 'User and company context required'
-      });
-    }
-
-    // Check if user is member of this company
-    const userCompany = await UserCompany.findOne({
-      where: {
-        user_id: req.user.id,
-        company_id: req.companyId,
-        status: 'active'
-      }
-    });
-
-    if (!userCompany) {
-      return res.status(403).json({
-        error: 'Access denied',
-        message: 'User is not a member of this company'
-      });
-    }
-
-    req.userCompanyRole = userCompany.role;
-    next();
-  } catch (error) {
-    logger.error('Company membership check error:', error);
-    res.status(500).json({
-      error: 'Membership check failed'
-    });
-  }
-};
-
-module.exports = {
-  extractCompanyContext,
-  optionalCompanyContext,
-  requireCompanyMembership
-};
+}
+module.exports = { extractCompanyContext };
