@@ -11,24 +11,24 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 
+
 // --- CORS Middleware (env-driven allowlist) ---
 const allowed = (process.env.CORS_ORIGINS || 'http://localhost:5173,https://release-peace.vercel.app')
-  .split(',')
-  .map(s => s.trim());
+  .split(',').map(s => s.trim());
 
-app.use(cors({
+const corsConfig = {
   origin(origin, cb) {
-    if (!origin) return cb(null, true); // curl/server-to-server
+    if (!origin) return cb(null, true);
     cb(null, allowed.includes(origin));
   },
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','X-Requested-With','X-Company-Id'],
-  preflightContinue: false,
   optionsSuccessStatus: 204,
-}));
+};
 
-app.options('*', cors()); // handle preflight globally
+app.use(cors(corsConfig));
+app.options('*', cors(corsConfig)); // ✅ use same config
 
 
 // Mount routers safely (use going forward)
@@ -294,11 +294,11 @@ app.get('/api/users', (req, res) => {
   });
 });
 
-// ========== COMPANY ROUTES ==========
-// ========== FLAG ROUTES ==========
+// ---------- ROUTERS (mount once) ----------
 app.use('/api/flags', require('./routes/flags'));
+app.use('/api/companies', require('./routes/companies'));
 
-// --- wrap the mock handlers so they don't collide in prod ---
+// ---------- MOCKS (only if explicitly enabled) ----------
 if (process.env.MOCK_API === '1') {
   app.get('/api/flags', (req, res) => {
     res.json({
@@ -450,31 +450,16 @@ app.post('/sdk/track/:flagName', (req, res) => {
 
 // ========== ERROR HANDLING ==========
 
-// ✅ mount real companies router BEFORE 404
-const companiesRouter = require('./routes/companies');
-app.use('/api/companies', companiesRouter);
 
-// ❗ keep 404 just above the error handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Route not found',
-    message: `The endpoint ${req.originalUrl} does not exist`,
-    timestamp: new Date().toISOString(),
-    availableEndpoints: [
-      '/health',
-      '/api/users/login',
-      '/api/users',
-      '/api/companies',
-      '/api/flags',
-      '/sdk'
-    ]
-  });
-});
+// ...existing code...
 
-// 🔻 Move the error handler to be the very last middleware
+// ---------- 404 ----------
+app.use('*', (req, res) => res.status(404).json({ error: 'Not found' }));
+
+// ---------- ERROR HANDLER (last) ----------
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
-  res.status(err.status || 500).json({ error: 'Internal server error', message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong', timestamp: new Date().toISOString() });
+  res.status(err.status || 500).json({ error: 'Internal server error' });
 });
 
 // ========== SERVER STARTUP ==========
