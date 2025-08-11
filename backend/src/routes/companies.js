@@ -4,7 +4,10 @@ const crypto = require('crypto');
 const router = express.Router();
 
 const { requireAuth } = require('../middleware/auth');
-const { requireCompanyMembership } = require('../middleware/company');
+const {
+  extractCompanyContext,
+  requireCompanyMembership,
+} = require('../middleware/company');
 const { requireRole } = require('../middleware/roles');
 const { User, UserCompany, Company } = require('../models');
 const { Op, fn, col, where } = require('sequelize');
