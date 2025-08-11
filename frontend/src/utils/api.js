@@ -1,21 +1,14 @@
 // Hardened company members API helper
 export async function getMembers(companyId) {
   let id = companyId;
-
   if (!id) {
     try {
       const saved = JSON.parse(localStorage.getItem('releasepeace_company') || 'null');
       id = saved?.id;
     } catch {}
+    if (!id) id = localStorage.getItem('rp_company_id') || undefined;
   }
-  if (!id) {
-    const fromLs = localStorage.getItem('rp_company_id');
-    if (fromLs) id = fromLs;
-  }
-
   if (!id) throw new ApiError('No company selected', 400);
-
-  // ensure the header too (apiRequest will also add it, but be explicit)
   return apiRequest(`/api/companies/${id}/members`, {
     headers: { 'X-Company-Id': id }
   });

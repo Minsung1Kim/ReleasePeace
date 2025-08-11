@@ -19,6 +19,16 @@ function requireRole(...allowed) {
   const allowedFlat = allowed.flat().filter(Boolean).map(r => String(r).toLowerCase());
   return async (req, res, next) => {
     try {
+      const companyId = (
+        req.headers['x-company-id'] ||
+        req.params?.companyId ||          // ✅ allow /companies/:companyId/*
+        req.company?.id ||
+        req.companyId ||
+        req.companyID
+      );
+      if (!companyId) {
+        return res.status(400).json({ error: 'Missing companyId' });
+      }
       const role = String(req.membership?.role ?? req.user?.role ?? '').toLowerCase();
       if (!role) return res.status(401).json({ error: 'No role on user/company membership' });
       if (!allowedFlat.includes(role)) return res.status(403).json({ error: 'Insufficient role' });
