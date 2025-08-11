@@ -1,3 +1,13 @@
+import { getAuth, onIdTokenChanged } from 'firebase/auth';
+import { companies, getCompanyMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
+import React, { useState, useEffect, useRef } from 'react'
+import ManageRolesModal from "./ManageRolesModal";
+import TeamViewerModal from "./TeamViewerModal";
+import ApprovalBadge from './ApprovalBadge';
+import ApprovalsPanel from './ApprovalsPanel';
+import * as api from '../utils/api';
+import { config } from '../config'
+
 function InviteCodePopover({ companyId, companyName }) {
   const [open, setOpen] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
@@ -47,8 +57,6 @@ function InviteCodePopover({ companyId, companyName }) {
     </div>
   );
 }
-import { companies, getCompanyMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
-import React, { useState, useEffect, useRef } from 'react'
 // Compact recent activity bell
 function ActivityBell({ authedFetch }) {
   const [open, setOpen] = useState(false);
@@ -146,12 +154,6 @@ function ActivityBell({ authedFetch }) {
     </div>
   );
 }
-import ManageRolesModal from "./ManageRolesModal";
-import TeamViewerModal from "./TeamViewerModal";
-import ApprovalBadge from './ApprovalBadge';
-import ApprovalsPanel from './ApprovalsPanel';
-import * as api from '../utils/api';
-import { config } from '../config'
 
 const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }) => {
   const companyPathParam = () => {
@@ -335,7 +337,49 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
     return () => clearInterval(timer);
   }, [company?.id]);
 
- 
+  function handleSwitchCompany(next) {
+    if (!next) return;
+    if (typeof setCompany === 'function') setCompany(next);
+    try {
+      if (next?.id) localStorage.setItem('rp_company_id', next.id);
+    } catch {}
+    // TODO: reload any data that depends on company here (flags, members, etc.)
+  }
+
+  // Keep Firebase token fresh before first API calls (prevents initial 401)
+  useEffect(() => {
+    const auth = getAuth();
+    const unsub = onIdTokenChanged(auth, async (user) => {
+      if (user) {
+        try { await user.getIdToken(true); } catch {}
+      }
+    });
+    return unsub;
+  }, []);
+
+  // If you already have "company" state, this stores it for API headers
+  useEffect(() => {
+    try {
+      if (company?.id) localStorage.setItem('rp_company_id', company.id);
+    } catch {}
+  }, [company?.id]);
+
+  // If you DON'T already load the user's company, add this loader:
+  useEffect(() => {
+    let ran = false;
+    (async () => {
+      if (ran) return; ran = true;
+      try {
+        const mine = await companies.getMine();
+        if (mine?.id) {
+          if (typeof setCompany === 'function') setCompany(mine);
+          localStorage.setItem('rp_company_id', mine.id);
+        }
+      } catch (e) {
+        console.error('load company failed', e);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     // Test API connection
@@ -705,7 +749,7 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
                           {envStats.enabled}/{envStats.total} environments enabled
                         </div>
                         {/* ApprovalBadge under actions row */}
-                        <ApprovalBadge flagId={flag.id} companyId={company.id} />
+                        <ApprovalBadge flagId={flag.id} companyId={company?.id} />
                       </div>
                       <div className="ml-6 text-right">
                         <div className="text-sm font-medium text-gray-900 mb-3">
@@ -1058,7 +1102,5 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
     </div>
   )
 }
-
-// ...existing code...
 
 export default Dashboard
