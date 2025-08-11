@@ -1,6 +1,6 @@
 // backend/src/middleware/company.js - COMPLETE FILE
 const { Company, User, UserCompany } = require('../models');
-const logger = require('../utils/logger');
+const logger = (() => { try { return require('../utils/logger'); } catch { return console; } })();
 
 /**
  * Extract company context from request

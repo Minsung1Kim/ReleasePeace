@@ -30,9 +30,12 @@ app.use(cors({
 
 app.options('*', cors()); // handle preflight globally
 
-// Mount approvals router (keep AFTER CORS)
-const approvals = require('./routes/approvals');
-app.use('/api', approvals);
+
+// Mount routers safely (use going forward)
+function safeUse(path, loader) {
+  try { app.use(path, loader()); console.log(`✅ Mounted ${path}`); }
+  catch (e) { console.error(`❌ Failed to mount ${path}:`, e.message); }
+}
 
 // Trust Railway's proxy
 app.set('trust proxy', 1);
