@@ -1,12 +1,12 @@
+import React, { useState, useEffect, useRef } from 'react';
 import { getAuth, onIdTokenChanged } from 'firebase/auth';
 import { companies, getCompanyMembers, updateMemberRole, transferOwnership, removeMember } from '../utils/api';
-import React, { useState, useEffect, useRef } from 'react'
-import ManageRolesModal from "./ManageRolesModal";
-import TeamViewerModal from "./TeamViewerModal";
+import * as api from '../utils/api';
+import { config } from '../config';
+import ManageRolesModal from './ManageRolesModal.jsx';
+import TeamViewerModal from './TeamViewerModal.jsx';
 import ApprovalBadge from './ApprovalBadge';
 import ApprovalsPanel from './ApprovalsPanel';
-import * as api from '../utils/api';
-import { config } from '../config'
 
 function InviteCodePopover({ companyId, companyName }) {
   const [open, setOpen] = useState(false);
@@ -156,20 +156,24 @@ function ActivityBell({ authedFetch }) {
 }
 
 const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }) => {
+  // --- State ---
+  const [company, setCompany] = useState(null);
+  const [showInvite, setShowInvite] = useState(false);
+  const [showManageRoles, setShowManageRoles] = useState(false);
   const companyPathParam = () => {
     const id = company?.id || '';
     const sub = company?.subdomain || '';
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRe.test(id) ? id : (sub || id);
   };
-  const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id
-  const [apiStatus, setApiStatus] = useState('checking...')
-  const [flags, setFlags] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [selectedFlag, setSelectedFlag] = useState(null)
-  const [activeEnvironment, setActiveEnvironment] = useState('production')
-  const [showCreateFlag, setShowCreateFlag] = useState(false)
+  const companyId = company?.id?.startsWith('company_') ? company.id.slice(8) : company?.id;
+  const [apiStatus, setApiStatus] = useState('checking...');
+  const [flags, setFlags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedFlag, setSelectedFlag] = useState(null);
+  const [activeEnvironment, setActiveEnvironment] = useState('production');
+  const [showCreateFlag, setShowCreateFlag] = useState(false);
   // New state for roles modal
   const [rolesOpen, setRolesOpen] = useState(false);   // manage roles (owner/admin)
   const [teamOpen, setTeamOpen]   = useState(false);   // read-only (everyone else)
@@ -339,12 +343,25 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
 
   function handleSwitchCompany(next) {
     if (!next) return;
-    if (typeof setCompany === 'function') setCompany(next);
-    try {
-      if (next?.id) localStorage.setItem('rp_company_id', next.id);
-    } catch {}
+    setCompany(next);
+    if (next?.id) localStorage.setItem('rp_company_id', next.id);
     // TODO: reload any data that depends on company here (flags, members, etc.)
   }
+  // --- Token warmup + load company effect ---
+  useEffect(() => {
+    const auth = getAuth();
+    const unsub = onIdTokenChanged(auth, async (user) => {
+      if (user) {
+        try { await user.getIdToken(true); } catch {}
+        try {
+          const mine = await companies.getMine();
+          setCompany(mine);
+          if (mine?.id) localStorage.setItem('rp_company_id', mine.id);
+        } catch (e) { console.error('load company failed', e); }
+      }
+    });
+    return unsub;
+  }, []);
 
   // Keep Firebase token fresh before first API calls (prevents initial 401)
   useEffect(() => {
@@ -582,8 +599,10 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
               {/* Use correct button based on role */}
               {['owner','admin'].includes(company?.role) ? (
                 <>
-                  <InviteCodePopover companyId={company.id} companyName={company.name} />
-                  <button onClick={openRoles} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                  <button type="button" onClick={() => setShowInvite(true)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
+                    Invite
+                  </button>
+                  <button type="button" onClick={() => setShowManageRoles(true)} className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">
                     Manage Roles
                   </button>
                 </>
@@ -840,31 +859,21 @@ const Dashboard = ({ user, company, token, getToken, onLogout, onSwitchCompany }
         </div>
 
       </div>
-      {rolesOpen && (
-        <ManageRolesModal
-          members={members}
-          currentUserId={user?.id}
-          onClose={() => setRolesOpen(false)}
-          onChangeRole={async (userId, role) => {
-            await api.updateMemberRole(company.id, userId, role);
-            await refreshMembers(); // keep modal updated
-          }}
-          onTransferOwnership={async (userId) => {
-            await api.transferOwnership(company.id, userId);
-            await refreshMembers();
-            window.location.reload(); // owner changed -> refresh header quickly
-          }}
-          onRemoveMember={async (userId) => {
-            await api.removeMember(company.id, userId);
-            await refreshMembers();
-          }}
+      {/* New Invite Modal */}
+      {showInvite && (
+        <TeamViewerModal
+          open
+          companyId={company?.id}
+          onClose={() => setShowInvite(false)}
         />
       )}
 
-      {teamOpen && (
-        <TeamViewerModal
-          members={members}
-          onClose={() => setTeamOpen(false)}
+      {/* New Manage Roles Modal */}
+      {showManageRoles && (
+        <ManageRolesModal
+          open
+          companyId={company?.id}
+          onClose={() => setShowManageRoles(false)}
         />
       )}
 
