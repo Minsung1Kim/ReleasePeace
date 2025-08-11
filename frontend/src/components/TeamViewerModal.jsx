@@ -11,13 +11,85 @@ const TeamViewerModal = ({ open, companyId, onClose, tab = 'members' }) => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!open || !companyId || tab !== 'invite') return;
-    apiRequest(`companies/${companyId}/invite-code`, {
-      headers: { 'X-Company-Id': companyId }
-    })
-      .then(r => setCode(r.invite_code || r.inviteCode || ''))
-      .catch(console.error);
-  }, [open, companyId, tab]);
+    if (open && onLoadInvite) onLoadInvite();
+  }, [open, onLoadInvite]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold">Team Members</h3>
+          <button className="px-3 py-1 border rounded" onClick={onClose}>Close</button>
+        </div>
+
+        {/* Invite controls for owner/admin */}
+        {canManage && (
+          <div className="mb-4 p-3 border rounded-lg">
+            <div className="text-sm font-medium mb-2">Invite Code</div>
+            <div className="flex gap-2">
+              <input readOnly value={inviteCode || ''} className="flex-1 border rounded px-2 py-1" />
+              <button className="px-2 py-1 border rounded" onClick={() => navigator.clipboard.writeText(inviteCode || '')}>
+                Copy
+              </button>
+              <button className="px-2 py-1 border rounded" onClick={onRegenerateInvite}>
+                Regenerate
+              </button>
+            </div>
+            <div className="text-[11px] text-gray-500 mt-1">
+              Share this code with a teammate. They can join via the Join Company screen.
+            </div>
+          </div>
+        )}
+
+        {/* Members list */}
+        {loading ? (
+          <div className="p-3 text-sm text-gray-500">Loading…</div>
+        ) : error ? (
+          <div className="p-3 text-sm text-red-600">{error}</div>
+        ) : (members || []).length === 0 ? (
+          <div className="p-3 text-sm text-gray-500">No members yet.</div>
+        ) : (
+          <ul className="divide-y">
+            {members.map(m => (
+              <li key={m.id} className="py-2 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium truncate">
+                    {m.display_name || m.username || m.email}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate">{m.email}</div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {/* role selector */}
+                  <select
+                    disabled={!canManage}
+                    value={(m.role || 'member').toLowerCase()}
+                    onChange={e => onChangeRole?.(m.id, e.target.value)}
+                    className="border rounded px-2 py-1 text-sm"
+                  >
+                    {['owner','admin','pm','engineer','member'].map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+
+                  {/* remove (not for yourself) */}
+                  {canManage && m.is_current_user !== true && (
+                    <button className="px-2 py-1 border rounded text-sm"
+                            onClick={() => onRemoveMember?.(m.id)}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default TeamViewerModal;
 
   useEffect(() => {
     if (tab !== 'members' || !companyId) return;
@@ -127,6 +199,5 @@ const TeamViewerModal = ({ open, companyId, onClose, tab = 'members' }) => {
       </div>
     </div>
   );
-};
-
-export default TeamViewerModal;
+// ...existing code...
+// Remove duplicate export and stray closing brace

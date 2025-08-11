@@ -183,14 +183,11 @@ function Dashboard({
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditRows, setAuditRows] = useState([]);
   const [auditForFlag, setAuditForFlag] = useState(null);
-  const [showInvite, setShowInvite] = useState(false);
-  const [showTeam, setShowTeam] = useState(false);
-  const [rolesOpen, setRolesOpen] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
   const [members, setMembers] = useState([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
-  const [inviteLoading, setInviteLoading] = useState(false);
-  const [inviteError, setInviteError] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [recentLoading, setRecentLoading] = useState(false);
   const [recent, setRecent] = useState([]);
   const [apiStatus, setApiStatus] = useState('checking...');
@@ -198,36 +195,32 @@ function Dashboard({
   // ---------- DERIVED VALUES ----------
   const company = activeCompany || companyProp || null;
   const stored = (() => { try { return JSON.parse(localStorage.getItem('releasepeace_company')) || null } catch { return null } })();
-  const effectiveRole = company?.role || stored?.role || user?.role || 'member';
-  const userRole = effectiveRole; // legacy alias to fix "userRole is not defined"
+  const effectiveRole = (company?.role || user?.role || '').toLowerCase();
+  const userRole = effectiveRole;
   const isOwnerOrAdmin = ['owner', 'admin'].includes(effectiveRole);
   const canCreate = ['owner','admin','pm'].includes(effectiveRole);
   const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
   const canManage = effectiveRole === 'owner' || effectiveRole === 'admin';
   const environments = ['development', 'staging', 'production'];
-  // Modal handlers
-  const openInvite = () => { setShowInvite(true); setShowTeam(false); setRolesOpen(false); };
-  const openTeam   = () => { setShowTeam(true);   setShowInvite(false); setRolesOpen(false); };
-  const openRoles  = () => { setRolesOpen(true);  setShowInvite(false); setShowTeam(false);  };
-  const handleOpenTeam = useCallback(async () => {
+  // Team modal handler
+  const openTeam = async () => {
     if (!company?.id) {
+      setTeamOpen(true);
       setTeamError('Select or create a company first.');
-      setShowTeam(true);
       return;
     }
+    setTeamOpen(true);
     setTeamError('');
     setTeamLoading(true);
-    setShowTeam(true);
     try {
-      const id = company?.id || localStorage.getItem('rp_company_id');
-      const list = await getMembers(id);
+      const list = await getMembers(company.id);
       setMembers(list?.members || list || []);
     } catch (e) {
       setTeamError(e.message || 'Failed to load members.');
     } finally {
       setTeamLoading(false);
     }
-  }, [company?.id]);
+  };
   const companyPathParam = () => {
     const id = company?.id || '';
     const sub = company?.subdomain || '';
@@ -428,13 +421,34 @@ function Dashboard({
   };
 
   // ---------- team / invite / manage roles ----------
+  // Refresh after changes
   const refreshMembers = async () => {
     try {
-      const list = await getMembers(company?.id);
-      setMembers(list || []);
-    } catch (e) {
-      console.error('load members failed', e);
-    }
+      const list = await getMembers(company.id);
+      setMembers(list?.members || list || []);
+    } catch {}
+  };
+
+  // Role update helper
+  const changeRole = async (userId, newRole) => {
+    await api.updateMemberRole(company.id, userId, newRole);
+    await refreshMembers();
+  };
+
+  // Remove member
+  const removeFromCompany = async (userId) => {
+    await api.removeMember(company.id, userId);
+    await refreshMembers();
+  };
+
+  // Invite code helpers
+  const loadInvite = async () => {
+    const c = await companies.get(company.id);
+    setInviteCode((c.invite_code || '').trim());
+  };
+  const regenInvite = async () => {
+    const c = await companies.regenerateInvite(company.id);
+    setInviteCode((c.invite_code || '').trim());
   };
 
   const onOpenTeam = useCallback(async () => {
@@ -575,32 +589,13 @@ function Dashboard({
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
               <ActivityBell authedFetch={authedFetch} />
 
-              {canManage && (
-                <>
-                  <button
-                    onClick={openInvite}
-                    disabled={!company?.id}
-                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  >
-                    Invite
-                  </button>
-                  <button
-                    onClick={openRoles}
-                    disabled={!company?.id}
-                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  >
-                    Manage Roles
-                  </button>
-                </>
-              )}
-
-              <button
-                onClick={openTeam}
-                disabled={!company?.id}
-                className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-              >
-                Team
-              </button>
+            <button
+              onClick={openTeam}
+              disabled={!company?.id}
+              className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+            >
+              Team
+            </button>
 
               {['qa','legal','owner','admin'].includes(user?.role) && (
                 <button
@@ -848,32 +843,21 @@ function Dashboard({
       </div>
 
 
-      {/* Invite modal */}
-      {showInvite && (
+      {/* Single Team modal with all management features */}
+      {teamOpen && (
         <TeamViewerModal
           open
-          companyId={companyId}
-          tab="invite"
-          onClose={() => setShowInvite(false)}
-        />
-      )}
-
-      {/* Team modal */}
-      {showTeam && (
-        <TeamViewerModal
-          open
-          companyId={companyId}
-          tab="members"
-          onClose={() => setShowTeam(false)}
-        />
-      )}
-
-      {/* Manage Roles modal */}
-      {rolesOpen && (
-        <ManageRolesModal
-          open
-          companyId={companyId}
-          onClose={() => setRolesOpen(false)}
+          companyId={company?.id}
+          members={members}
+          loading={teamLoading}
+          error={teamError}
+          canManage={['owner','admin'].includes(effectiveRole)}
+          onChangeRole={changeRole}
+          onRemoveMember={removeFromCompany}
+          inviteCode={inviteCode}
+          onLoadInvite={loadInvite}
+          onRegenerateInvite={regenInvite}
+          onClose={() => setTeamOpen(false)}
         />
       )}
 
