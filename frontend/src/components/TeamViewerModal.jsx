@@ -1,200 +1,203 @@
+import React, { useEffect, useRef } from "react";
 
-import { useEffect, useState, useRef } from "react";
-import { apiRequest, getMembers } from '../utils/api';
+const ROLE_OPTIONS = ["owner", "admin", "pm", "engineer", "qa", "legal", "member"];
 
+export default function TeamViewerModal({
+  open,
+  onClose,
+  companyId,
 
-const TeamViewerModal = ({ open, companyId, onClose, tab = 'members' }) => {
+  // roster
+  members = [],
+  loading = false,
+  error = "",
+
+  // permissions
+  canManage = false,
+
+  // role / membership mutations
+  onChangeRole,         // (userId, newRole) => Promise<void>
+  onRemoveMember,       // (userId) => Promise<void>
+
+  // invite
+  inviteCode = "",
+  onLoadInvite,         // () => Promise<void>
+  onRegenerateInvite,   // () => Promise<void>
+}) {
   const overlayRef = useRef(null);
-  const [code, setCode] = useState('');
-  const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
+  // Load invite code when the modal opens (only if user can manage)
   useEffect(() => {
-    if (open && onLoadInvite) onLoadInvite();
-  }, [open, onLoadInvite]);
+    if (open && canManage && typeof onLoadInvite === "function") {
+      onLoadInvite().catch(() => {});
+    }
+  }, [open, canManage, onLoadInvite]);
 
-  if (!open) return null; // guard is fine INSIDE a function
+  // Close on ESC
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === "Escape" && onClose?.();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const copyInvite = async () => {
+    if (!inviteCode) return;
+    try { await navigator.clipboard.writeText(inviteCode); } catch {}
+  };
+
+  const handleBackdrop = (e) => {
+    if (e.target === overlayRef.current) onClose?.();
+  };
 
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
-      onClick={onClose}
+      onClick={handleBackdrop}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
     >
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
-        {/* Invite Code Section */}
-        <div className="mb-6">
-          <div className="font-semibold text-lg mb-2">Invite to Company</div>
-          <div className="flex items-center gap-2 mb-2">
-            <input
-              type="text"
-              value={inviteCode}
-              readOnly
-              className="w-full px-2 py-1 border rounded text-sm"
-              onFocus={e => e.target.select()}
-            />
-            <button className="px-2 py-1 border rounded text-xs" onClick={() => navigator.clipboard.writeText(inviteCode)} disabled={!inviteCode}>Copy</button>
-            <button className="px-2 py-1 border rounded text-xs" onClick={onRegenerateInvite}>Regenerate</button>
-          </div>
+      <div
+        className="bg-white w-full max-w-2xl rounded-2xl shadow-xl p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold">Team & Invites</h3>
+          <button className="px-3 py-1 border rounded" onClick={onClose}>
+            Close
+          </button>
         </div>
 
-        {/* Members Section */}
-        <div>
-          <div className="font-semibold text-lg mb-2">Team Members</div>
-          {loading ? (
-            <div className="text-sm text-gray-500">Loading…</div>
-          ) : error ? (
-            <div className="text-sm text-red-600">{error}</div>
-          ) : (
+        {/* Invite section (owners/admins only) */}
+        {canManage && (
+          <div className="mb-5 p-3 border rounded-lg">
+            <div className="font-medium text-sm mb-2">Invite Code</div>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={inviteCode || ""}
+                placeholder="No code yet"
+                className="flex-1 px-2 py-1 border rounded text-sm bg-gray-50"
+                onFocus={(e) => e.target.select()}
+              />
+              <button
+                onClick={copyInvite}
+                disabled={!inviteCode}
+                className="px-2 py-1 border rounded text-xs hover:bg-gray-50 disabled:opacity-50"
+              >
+                Copy
+              </button>
+              <button
+                onClick={() => onRegenerateInvite?.()}
+                className="px-2 py-1 border rounded text-xs hover:bg-gray-50"
+              >
+                Regenerate
+              </button>
+            </div>
+            <div className="text-[11px] text-gray-500 mt-1">
+              Share this code with a teammate. They can join via the “Join Company” screen.
+            </div>
+          </div>
+        )}
+
+        {/* Members list */}
+        <div className="mb-2">
+          <div className="font-semibold text-sm mb-2">Team Members</div>
+
+          {loading && <div className="text-sm text-gray-500 p-2">Loading…</div>}
+
+          {!loading && error && (
+            <div className="text-sm text-red-600 p-2">{error}</div>
+          )}
+
+          {!loading && !error && (members?.length ?? 0) === 0 && (
+            <div className="text-sm text-gray-500 p-2">No members yet.</div>
+          )}
+
+          {!loading && !error && (members?.length ?? 0) > 0 && (
             <ul className="divide-y">
-              {members.map(m => (
-                <li key={m.id} className="py-3 flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{m.display_name || m.username || m.email}</div>
-                    <div className="text-xs text-gray-500">{m.role}</div>
-                  </div>
-                  {canManage && (
-                    <div className="flex gap-2">
-                      <select
-                        value={m.role}
-                        onChange={e => onChangeRole(m.id, e.target.value)}
-                        className="px-2 py-1 border rounded text-xs"
-                      >
-                        <option value="owner">Owner</option>
-                        <option value="admin">Admin</option>
-                        <option value="pm">PM</option>
-                        <option value="engineer">Engineer</option>
-                        <option value="qa">QA</option>
-                        <option value="legal">Legal</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                      <button className="px-2 py-1 border rounded text-xs text-red-600" onClick={() => onRemoveMember(m.id)}>Remove</button>
+              {members.map((m) => {
+                // be flexible with backend shapes
+                const id =
+                  m.id || m.user_id || m.userId || m.uid || m.user?.id || m.user?.uid;
+                const name =
+                  m.display_name ||
+                  m.username ||
+                  m.email ||
+                  m.user?.display_name ||
+                  m.user?.username ||
+                  m.user?.email ||
+                  "Unknown";
+                const role =
+                  (m.role || m.user_role || m.user?.role || "member").toLowerCase();
+                const isSelf = m.is_current_user === true; // Dashboard can set this flag
+
+                const onChange = async (e) => {
+                  const newRole = e.target.value;
+                  if (!id || !onChangeRole) return;
+                  try {
+                    await onChangeRole(id, newRole);
+                  } catch (err) {
+                    alert(err?.message || "Failed to update role");
+                  }
+                };
+
+                const onRemove = async () => {
+                  if (!id || !onRemoveMember) return;
+                  if (!confirm("Remove this member from the company?")) return;
+                  try {
+                    await onRemoveMember(id);
+                  } catch (err) {
+                    alert(err?.message || "Failed to remove member");
+                  }
+                };
+
+                return (
+                  <li key={id || name} className="py-2 flex items-center justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{name}</div>
+                      <div className="text-xs text-gray-500 truncate">{m.email || m.user?.email}</div>
                     </div>
-                  )}
-                </li>
-              ))}
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <select
+                        className="px-2 py-1 border rounded text-xs"
+                        disabled={!canManage || isSelf} // prevent self-demote here
+                        value={ROLE_OPTIONS.includes(role) ? role : "member"}
+                        onChange={onChange}
+                      >
+                        {ROLE_OPTIONS.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+
+                      {canManage && !isSelf && role !== "owner" && (
+                        <button
+                          className="px-2 py-1 border rounded text-xs text-red-600 hover:bg-red-50"
+                          onClick={onRemove}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
 
-        <div className="flex justify-end mt-6">
-          <button className="px-4 py-2 border rounded" onClick={onClose}>Close</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default TeamViewerModal;
-
-  useEffect(() => {
-    if (tab !== 'members' || !companyId) return;
-    let alive = true;
-    (async () => {
-      setLoading(true); setError('');
-      try {
-        const list = await getMembers(companyId);
-        if (alive) setMembers(Array.isArray(list?.members) ? list.members : (list || []));
-      } catch (e) {
-        if (alive) setError(e.message || 'Failed to load members');
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
-  }, [tab, companyId]);
-
-  useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose?.();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const regenerate = () =>
-    apiRequest(`companies/${companyId}/regenerate-invite`, {
-      method: 'POST',
-      headers: { 'X-Company-Id': companyId }
-    })
-      .then(r => setCode(r.invite_code || r.inviteCode || ''))
-      .catch(console.error);
-
-  return (
-    <div
-      ref={overlayRef}
-      onClick={(e) => e.target === overlayRef.current && onClose?.()}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-    >
-      <div className="bg-white w-full max-w-xl rounded-2xl shadow-xl">
-        {/* Invite Code Section */}
-        {tab === 'invite' && (
-          <>
-            <div className="p-4 border-b">
-              <h2 className="text-lg font-semibold">Invite Code</h2>
-              <p className="text-xs text-gray-500 mt-1">Share this code to invite teammates</p>
-            </div>
-            <div className="p-4">
-              <div className="mb-2">
-                <input
-                  readOnly
-                  value={code}
-                  className="w-full px-3 py-2 border rounded text-lg font-mono bg-gray-50"
-                />
-              </div>
-              <button
-                className="px-3 py-2 rounded border bg-blue-50 text-blue-700 mr-2"
-                onClick={regenerate}
-              >
-                Regenerate
-              </button>
-              <button
-                className="px-3 py-2 rounded border bg-gray-50 text-gray-700"
-                onClick={() => navigator.clipboard.writeText(code)}
-              >
-                Copy
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* Members Section */}
-        {tab === 'members' && (
-          <>
-            <div className="p-4 border-b">
-              <h2 className="text-lg font-semibold">Team Members</h2>
-            </div>
-            <div className="p-4">
-              {loading && <div className="text-sm text-gray-500 p-3">Loading…</div>}
-              {error && <div className="text-sm text-red-600 p-3">{error}</div>}
-              {!loading && !error && members.length === 0 && (
-                <div className="text-sm text-gray-500 p-3">No members yet.</div>
-              )}
-              {!loading && !error && members.length > 0 && (
-                <ul className="divide-y">
-                  {members.map(m => (
-                    <li key={m.id} className="py-2 flex items-center justify-between">
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">
-                          {m.display_name || m.username || m.email}
-                        </div>
-                        <div className="text-xs text-gray-500">{m.role}</div>
-                      </div>
-                      {/* (optional) role actions if owner/admin */}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </>
-        )}
-
-        <div className="p-3 flex justify-end gap-2 border-t">
-          <button className="px-4 py-2 rounded-lg border hover:bg-gray-50" onClick={() => onClose?.()}>
+        {/* Footer */}
+        <div className="pt-3 border-t flex justify-end">
+          <button className="px-4 py-2 border rounded hover:bg-gray-50" onClick={onClose}>
             Close
           </button>
         </div>
       </div>
     </div>
   );
-// ...existing code...
-// Remove duplicate export and stray closing brace
+}
