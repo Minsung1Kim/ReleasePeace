@@ -3,13 +3,25 @@ const express = require('express');
 const { authMiddleware } = require('../middleware/auth');
 const { requireRole } = require('../middleware/roles');
 const { extractCompanyContext, requireCompanyMembership } = require('../middleware/company');
-// tolerate missing approval middleware in production
+
+// ✅ safe-import; if the file/export is missing, we no-op instead of crashing
 const { requireApprovalIfRisky } = (() => {
   try { return require('../middleware/requireApproval'); }
-  catch {
-    return { requireApprovalIfRisky: (req, res, next) => next() };
-  }
+  catch { return { requireApprovalIfRisky: (req, res, next) => next() }; }
 })();
+
+// ✅ guard to ensure Express never receives `undefined` as a middleware
+const asMw = (name, fn) =>
+  (typeof fn === 'function'
+    ? fn
+    : (req, res, next) => {
+        console.warn(`[flags] missing middleware "${name}", skipping`);
+        next();
+      });
+
+const router = express.Router();
+
+// Safe audit logger import
 const { logAudit } = (() => {
   try { return require('../services/auditService'); }
   catch { return { logAudit: async () => {} }; }
@@ -17,8 +29,6 @@ const { logAudit } = (() => {
 
 const { FeatureFlag, FlagState, FlagApproval, AuditLog, User } = require('../models');
 const { Op } = require('sequelize');
-
-const router = express.Router();
 
 /* ------------ helpers ------------ */
 
@@ -45,9 +55,9 @@ async function writeAudit({ flagId, userId, action, oldState = null, newState = 
 // list flags
 router.get(
   '/',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
   async (req, res) => {
     try {
       const flags = await FeatureFlag.findAll({
@@ -68,9 +78,9 @@ router.get(
 // get one flag
 router.get(
   '/:id',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
   async (req, res) => {
     try {
       const flag = await FeatureFlag.findOne({
@@ -157,93 +167,105 @@ router.post(
 
 /* ------------ update meta ------------ */
 
-router.put('/:id', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
-  try {
-    const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
-    if (!flag) return res.status(404).json({ error: 'Flag not found' });
+router.put(
+  '/:id',
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
+  async (req, res) => {
+    try {
+      const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
+      if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-    const { name } = req.body;
-    if (name && name !== flag.name) {
-      const dup = await FeatureFlag.findOne({
-        where: { name, company_id: req.companyId, id: { [Op.ne]: flag.id } }
+      const { name } = req.body;
+      if (name && name !== flag.name) {
+        const dup = await FeatureFlag.findOne({
+          where: { name, company_id: req.companyId, id: { [Op.ne]: flag.id } }
+        });
+        if (dup) return res.status(400).json({ error: 'Flag name already exists in this company' });
+      }
+
+      const before = flag.toJSON();
+      await flag.update({
+        name: req.body.name ?? flag.name,
+        description: req.body.description ?? flag.description,
+        flag_type: req.body.flag_type ?? flag.flag_type,
+        risk_level: req.body.risk_level ?? flag.risk_level,
+        tags: req.body.tags ?? flag.tags,
+        metadata: req.body.metadata ?? flag.metadata,
+        requires_approval: req.body.requires_approval ?? flag.requires_approval,
+        auto_disable_on_error: req.body.auto_disable_on_error ?? flag.auto_disable_on_error,
+        error_threshold: req.body.error_threshold ?? flag.error_threshold
       });
-      if (dup) return res.status(400).json({ error: 'Flag name already exists in this company' });
+
+      const after = await FeatureFlag.findByPk(flag.id, {
+        include: [
+          { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
+          { model: FlagState, as: 'states' }
+        ]
+      });
+
+      await writeAudit({
+        flagId: flag.id,
+        userId: req.user.id,
+        action: 'flag:update',
+        oldState: before,
+        newState: after.toJSON(),
+        reason: req.body.reason || '',
+        environment: null,
+        req
+      });
+
+      res.json({ success: true, flag: after });
+    } catch (error) {
+      console.error('Error updating flag:', error);
+      res.status(500).json({ error: 'Failed to update flag', message: error.message });
     }
-
-    const before = flag.toJSON();
-    await flag.update({
-      name: req.body.name ?? flag.name,
-      description: req.body.description ?? flag.description,
-      flag_type: req.body.flag_type ?? flag.flag_type,
-      risk_level: req.body.risk_level ?? flag.risk_level,
-      tags: req.body.tags ?? flag.tags,
-      metadata: req.body.metadata ?? flag.metadata,
-      requires_approval: req.body.requires_approval ?? flag.requires_approval,
-      auto_disable_on_error: req.body.auto_disable_on_error ?? flag.auto_disable_on_error,
-      error_threshold: req.body.error_threshold ?? flag.error_threshold
-    });
-
-    const after = await FeatureFlag.findByPk(flag.id, {
-      include: [
-        { model: User, as: 'creator', attributes: ['id', 'username', 'display_name'] },
-        { model: FlagState, as: 'states' }
-      ]
-    });
-
-    await writeAudit({
-      flagId: flag.id,
-      userId: req.user.id,
-      action: 'flag:update',
-      oldState: before,
-      newState: after.toJSON(),
-      reason: req.body.reason || '',
-      environment: null,
-      req
-    });
-
-    res.json({ success: true, flag: after });
-  } catch (error) {
-    console.error('Error updating flag:', error);
-    res.status(500).json({ error: 'Failed to update flag', message: error.message });
   }
-});
+);
 
 /* ------------ delete (soft) ------------ */
 
-router.delete('/:id', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
-  try {
-    const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
-    if (!flag) return res.status(404).json({ error: 'Flag not found' });
+router.delete(
+  '/:id',
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
+  async (req, res) => {
+    try {
+      const flag = await FeatureFlag.findOne({ where: { id: req.params.id, company_id: req.companyId } });
+      if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-    const before = flag.toJSON();
-    await flag.update({ is_active: false });
+      const before = flag.toJSON();
+      await flag.update({ is_active: false });
 
-    await writeAudit({
-      flagId: flag.id,
-      userId: req.user.id,
-      action: 'flag:delete',
-      oldState: before,
-      newState: flag.toJSON(),
-      reason: req.body.reason || '',
-      environment: null,
-      req
-    });
+      await writeAudit({
+        flagId: flag.id,
+        userId: req.user.id,
+        action: 'flag:delete',
+        oldState: before,
+        newState: flag.toJSON(),
+        reason: req.body.reason || '',
+        environment: null,
+        req
+      });
 
-    res.json({ success: true, message: 'Flag deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting flag:', error);
-    res.status(500).json({ error: 'Failed to delete flag', message: error.message });
+      res.json({ success: true, message: 'Flag deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting flag:', error);
+      res.status(500).json({ error: 'Failed to delete flag', message: error.message });
+    }
   }
-});
+);
 
 /* ------------ toggle state ------------ */
 
 router.put(
   '/:flagId/state/:environment',
-  authMiddleware,
-  extractCompanyContext,
-  requireRole(['owner', 'pm', 'engineer']),
-  requireApprovalIfRisky,
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireRole', requireRole(['owner', 'pm', 'engineer'])),
+  asMw('requireApprovalIfRisky', requireApprovalIfRisky),
   async (req, res) => {
     try {
       const { flagId, environment } = req.params;
@@ -357,68 +379,82 @@ router.post('/:flagId/rollback', authMiddleware, extractCompanyContext, requireR
 /* ------------ approvals CRUD ------------ */
 
 // request approval (engineer/pm)
-router.post('/:flagId/approvals', authMiddleware, extractCompanyContext, requireCompanyMembership, requireRole(['engineer', 'pm']), async (req, res) => {
-  try {
-    const { flagId } = req.params;
-    const { approver_role = 'qa', comments = '' } = req.body || {};
+router.post(
+  '/:flagId/approvals',
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
+  asMw('requireRole', requireRole(['engineer', 'pm'])),
+  async (req, res) => {
+    try {
+      const { flagId } = req.params;
+      const { approver_role = 'qa', comments = '' } = req.body || {};
 
-    const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
-    if (!flag) return res.status(404).json({ error: 'Flag not found' });
+      const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
+      if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-    const approval = await FlagApproval.create({
-      flag_id: flag.id,
-      requested_by: req.user.id,
-      approver_role,
-      status: 'pending',
-      comments
-    });
+      const approval = await FlagApproval.create({
+        flag_id: flag.id,
+        requested_by: req.user.id,
+        approver_role,
+        status: 'pending',
+        comments
+      });
 
-    await writeAudit({
-      flagId: flag.id,
-      userId: req.user.id,
-      action: 'approval:request',
-      oldState: null,
-      newState: approval.toJSON(),
-      reason: comments || '',
-      environment: null,
-      req
-    });
+      await writeAudit({
+        flagId: flag.id,
+        userId: req.user.id,
+        action: 'approval:request',
+        oldState: null,
+        newState: approval.toJSON(),
+        reason: comments || '',
+        environment: null,
+        req
+      });
 
-    res.status(201).json({ success: true, approval });
-  } catch (error) {
-    console.error('Create approval failed:', error);
-    res.status(500).json({ error: 'Create approval failed', message: error.message });
+      res.status(201).json({ success: true, approval });
+    } catch (error) {
+      console.error('Create approval failed:', error);
+      res.status(500).json({ error: 'Create approval failed', message: error.message });
+    }
   }
-});
+);
 
 // list approvals for a flag
-router.get('/:flagId/approvals', authMiddleware, extractCompanyContext, requireCompanyMembership, async (req, res) => {
-  try {
-    const { flagId } = req.params;
-    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
+router.get(
+  '/:flagId/approvals',
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
+  async (req, res) => {
+    try {
+      const { flagId } = req.params;
+      const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
 
-    const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
-    if (!flag) return res.status(404).json({ error: 'Flag not found' });
+      const flag = await FeatureFlag.findOne({ where: { id: flagId, company_id: req.companyId } });
+      if (!flag) return res.status(404).json({ error: 'Flag not found' });
 
-    const approvals = await FlagApproval.findAll({
-      where: { flag_id: flagId },
-      include: [{ model: User, as: 'requester', attributes: ['id', 'display_name', 'username', 'email'] },
-                { model: User, as: 'approver', attributes: ['id', 'display_name', 'username', 'email'] }],
-      order: [['created_at', 'DESC']],
-      limit
-    });
-    res.json({ success: true, approvals });
-  } catch (e) {
-    res.status(500).json({ error: 'Failed to list approvals', message: e.message });
+      const approvals = await FlagApproval.findAll({
+        where: { flag_id: flagId },
+        include: [{ model: User, as: 'requester', attributes: ['id', 'display_name', 'username', 'email'] },
+                  { model: User, as: 'approver', attributes: ['id', 'display_name', 'username', 'email'] }],
+        order: [['created_at', 'DESC']],
+        limit
+      });
+      res.json({ success: true, approvals });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to list approvals', message: e.message });
+    }
   }
-});
+);
 
 // approve/reject (qa/legal/owner/admin)
-router.patch('/:flagId/approvals/:approvalId',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
-  requireRole(['qa', 'legal', 'owner', 'admin']),
+router.patch(
+  '/:flagId/approvals/:approvalId',
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
+  asMw('requireRole', requireRole(['qa', 'legal', 'owner', 'admin'])),
   async (req, res) => {
     try {
       const { flagId, approvalId } = req.params;
@@ -452,10 +488,10 @@ router.patch('/:flagId/approvals/:approvalId',
 /* ------------ approvals: pending for this company ------------ */
 
 router.get('/approvals/pending',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
-  requireRole(['qa', 'legal', 'owner', 'admin']),
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
+  asMw('requireRole', requireRole(['qa', 'legal', 'owner', 'admin'])),
   async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
@@ -494,9 +530,9 @@ router.get('/approvals/pending',
 /* ------------ audit: per flag & recent for company ------------ */
 
 router.get('/:flagId/audit',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
   async (req, res) => {
     try {
       const { flagId } = req.params;
@@ -534,9 +570,9 @@ router.get('/:flagId/audit',
 // recent audit
 router.get(
   '/audit/recent',
-  authMiddleware,
-  extractCompanyContext,
-  requireCompanyMembership,
+  asMw('authMiddleware', authMiddleware),
+  asMw('extractCompanyContext', extractCompanyContext),
+  asMw('requireCompanyMembership', requireCompanyMembership),
   async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
