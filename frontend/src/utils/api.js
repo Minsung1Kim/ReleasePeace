@@ -2,69 +2,30 @@
 export async function getInviteCode(companyId) {
   return apiRequest(`/api/companies/${companyId}/invite-code`);
 }
+export { apiRequest, ApiError };
+
 
 import { config } from '../config';
 
+const API_ORIGIN = config.apiUrl.replace(/\/$/, ''); // e.g. https://...railway.app
 
-class ApiError extends Error {
-  constructor(message, status, data) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-    this.data = data
-  }
+function buildUrl(path) {
+  const p = `/${String(path || '').replace(/^\//, '')}`;
+  // If caller already passed /api/... don't double it
+  const needsApi = !p.startsWith('/api/');
+  return `${API_ORIGIN}${needsApi ? '/api' : ''}${p}`;
 }
 
-const apiRequest = async (endpoint, options = {}) => {
-  const url = `${config.apiUrl}${endpoint}`
-  
-  const defaultOptions = {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  }
-
-  // Add auth token if available
-  const token = localStorage.getItem('releasepeace_token')
-  if (token) {
-    defaultOptions.headers['Authorization'] = `Bearer ${token}`
-  }
-
-  // Add company ID if available
-  const company = localStorage.getItem('releasepeace_company')
-  if (company) {
-    const companyData = JSON.parse(company)
-    defaultOptions.headers['X-Company-ID'] = companyData.id
-  }
-
-  const mergedOptions = {
-    ...defaultOptions,
-    ...options,
-    headers: {
-      ...defaultOptions.headers,
-      ...options.headers,
-    },
-  }
-
-  try {
-    const response = await fetch(url, mergedOptions)
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new ApiError(
-        data.message || `HTTP ${response.status}`,
-        response.status,
-        data
-      )
-    }
-
-    return data
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error
-    }
-    throw new ApiError(`Network error: ${error.message}`, 0, null)
-  }
+export async function apiRequest(path, { method = 'GET', body, headers = {} } = {}) {
+  const url = buildUrl(path);
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: body ? JSON.stringify(body) : undefined,
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.status === 204 ? null : res.json();
 }
 
 // Auth API calls

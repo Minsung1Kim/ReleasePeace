@@ -11,8 +11,8 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Mount approvals router
-const approvalsRouter = require('./routes/approvals');
-app.use('/api', approvalsRouter);
+const approvals = require('./routes/approvals');
+app.use('/api', approvals);
 
 // Trust Railway's proxy
 app.set('trust proxy', 1);
