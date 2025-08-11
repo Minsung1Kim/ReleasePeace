@@ -1,3 +1,59 @@
+// ---------- Invite Code Popover ----------
+function InviteCodePopover({ companyId, companyName }) {
+  const [open, setOpen] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+
+  async function loadInvite() {
+    const c = await companies.get(companyId);   // expects { invite_code }
+    setInviteCode((c.invite_code || '').trim());
+  }
+
+  async function regenerate() {
+    if (!confirm('Regenerate invite? Old links will stop working.')) return;
+    const updated = await companies.regenerateInvite(companyId); // { invite_code }
+    setInviteCode((updated.invite_code || '').trim());
+  }
+  async function copyCode() {
+    if (!inviteCode) return;
+    await navigator.clipboard.writeText(inviteCode);
+  }
+
+  useEffect(() => {
+    if (open && companyId) loadInvite();
+  }, [open, companyId]);
+
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+        disabled={!companyId}
+      >
+        Invite
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 w-80 max-w-xs rounded-xl border bg-white shadow-xl z-50 p-4">
+          <div className="font-semibold mb-2">Invite to {companyName}</div>
+          <div className="mb-2">
+            <input
+              type="text"
+              value={inviteCode}
+              readOnly
+              className="w-full px-2 py-1 border rounded text-sm"
+              onFocus={e => e.target.select()}
+            />
+          </div>
+          <div className="flex gap-2">
+            <button className="px-2 py-1 border rounded text-xs" onClick={copyCode} disabled={!inviteCode}>Copy</button>
+            <button className="px-2 py-1 border rounded text-xs" onClick={regenerate}>Regenerate</button>
+            <button className="px-2 py-1 border rounded text-xs" onClick={() => setOpen(false)}>Close</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 // src/components/Dashboard.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getAuth, onIdTokenChanged } from 'firebase/auth';
@@ -118,6 +174,40 @@ function Dashboard({
   const [activeCompany, setActiveCompany] = useState(companyProp || null);
   const company = activeCompany || companyProp || null;
 
+  // Pick the right company object from the API responses
+  const normalizeCompany = (resp) => {
+    if (!resp) return null;
+    if (resp.id) return resp;                                   // already a company
+    if (resp.company) return resp.company;                      // { company }
+    if (Array.isArray(resp.companies) && resp.companies.length) {
+      const saved = localStorage.getItem('rp_company_id');
+      return resp.companies.find(c => c.id === saved) || resp.companies[0];
+    }
+    // membership shape: { companyId, role }
+    if (resp.companyId) return { id: resp.companyId, role: resp.role };
+    return null;
+  };
+
+  // Load the active company (and expand to full detail)
+  const loadActiveCompany = React.useCallback(async () => {
+    try {
+      // who am I a member of?
+      const mine = await authedFetch('/api/companies/mine');   // returns company / companies / membership
+      const base = normalizeCompany(mine);
+      if (!base?.id) return;
+
+      // fetch full company details (name, plan, role, members, etc.)
+      const full = await authedFetch(`/api/companies/${base.id}`);
+      const c = normalizeCompany(full) || base;
+
+      setActiveCompany(c);
+      localStorage.setItem('rp_company_id', c.id);
+      localStorage.setItem('releasepeace_company', JSON.stringify(c));
+    } catch (e) {
+      console.warn('loadActiveCompany failed', e);
+    }
+  }, [authedFetch]);
+
   // persisted id helpers
   const companyPathParam = () => {
     const id = company?.id || '';
@@ -203,30 +293,22 @@ function Dashboard({
     if (companyProp?.id) localStorage.setItem('rp_company_id', companyProp.id);
   }, [companyProp?.id]);
 
+  // Load active company on mount and after token refresh
+  useEffect(() => { loadActiveCompany(); }, [loadActiveCompany]);
+
   // Keep Firebase fresh (avoid first-load 401)
   useEffect(() => {
     const auth = getAuth();
-    const unsub = onIdTokenChanged(auth, async (u) => { if (u) { try { await u.getIdToken(true); } catch {} } });
-    return unsub;
-  }, []);
-
-  // If user logs in and we don't have company, load mine
-  useEffect(() => {
-    const auth = getAuth();
     const unsub = onIdTokenChanged(auth, async (u) => {
-      if (!u) return;
-      try { await u.getIdToken(true); } catch {}
-      try {
-        const mine = await authedFetch('/api/companies/mine');
-        setActiveCompany(mine);
-        if (mine?.id) {
-          localStorage.setItem('rp_company_id', mine.id);
-          localStorage.setItem('releasepeace_company', JSON.stringify(mine));
-        }
-      } catch (e) { /* ignore */ }
+      if (u) {
+        try { await u.getIdToken(true); } catch {}
+        loadActiveCompany();
+      }
     });
     return unsub;
   }, []);
+
+  // Remove legacy effect: now handled by loadActiveCompany
 
   // Poll role changes
   useEffect(() => {
@@ -476,14 +558,7 @@ function Dashboard({
 
               {['owner','admin'].includes(company?.role) ? (
                 <>
-                  <button
-                    type="button"
-                    onClick={onOpenInvite}
-                    disabled={!company?.id}
-                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-                  >
-                    Invite
-                  </button>
+                  <InviteCodePopover companyId={companyId} companyName={company?.name || ''} />
                   <button
                     type="button"
                     onClick={() => setManageRolesOpen(true)}
