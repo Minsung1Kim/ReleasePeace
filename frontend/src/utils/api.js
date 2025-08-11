@@ -1,17 +1,9 @@
+
+import { getAuth } from 'firebase/auth';
+
 // Get invite code for a company
 export async function getInviteCode(companyId) {
   return apiRequest(`/api/companies/${companyId}/invite-code`);
-}
-
-import { config } from '../config';
-
-const API_ORIGIN = config.apiUrl.replace(/\/$/, ''); // e.g. https://...railway.app
-
-function buildUrl(path) {
-  const p = `/${String(path || '').replace(/^\//, '')}`;
-  // If caller already passed /api/... don't double it
-  const needsApi = !p.startsWith('/api/');
-  return `${API_ORIGIN}${needsApi ? '/api' : ''}${p}`;
 }
 
 export class ApiError extends Error {
@@ -24,14 +16,36 @@ export class ApiError extends Error {
 }
 
 export async function apiRequest(path, { method = 'GET', body, headers = {} } = {}) {
-  const url = buildUrl(path);
-  const res = await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: body ? JSON.stringify(body) : undefined,
-    credentials: 'include',
-  });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  const base = (import.meta.env.VITE_API_BASE || 'https://releasepeace-production.up.railway.app').replace(/\/$/, '');
+  const url = `${base}/${String(path).replace(/^\//, '')}`;
+
+  const auth = getAuth();
+  const user = auth.currentUser;
+  let token = user ? await user.getIdToken() : null;
+
+  async function doFetch(tkn) {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tkn ? { Authorization: `Bearer ${tkn}` } : {}),
+        ...headers,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: 'include',
+    });
+    return res;
+  }
+
+  let res = await doFetch(token);
+
+  // if token expired, refresh once and retry
+  if (res.status === 401 && user) {
+    token = await user.getIdToken(true);
+    res = await doFetch(token);
+  }
+
+  if (!res.ok) throw new Error(String(res.status));
   return res.status === 204 ? null : res.json();
 }
 

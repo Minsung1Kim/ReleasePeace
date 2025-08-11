@@ -73,6 +73,8 @@ async function getOrCreateUserFromFirebase(payload) {
 }
 
 const authMiddleware = async (req, res, next) => {
+  // Allow CORS preflight requests to pass through without auth
+  if (req.method === 'OPTIONS') return next();
   try {
     const raw = req.header('Authorization') || '';
     const token = raw.startsWith('Bearer ') ? raw.slice(7) : null;

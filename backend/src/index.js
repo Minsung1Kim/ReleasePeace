@@ -10,7 +10,27 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Mount approvals router
+
+// --- CORS Middleware (env-driven allowlist) ---
+const allowed = (process.env.CORS_ORIGINS || 'http://localhost:5173,https://release-peace.vercel.app')
+  .split(',')
+  .map(s => s.trim());
+
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true); // curl/server-to-server
+    cb(null, allowed.includes(origin));
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','X-Requested-With','X-Company-Id'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+}));
+
+app.options('*', cors()); // handle preflight globally
+
+// Mount approvals router (keep AFTER CORS)
 const approvals = require('./routes/approvals');
 app.use('/api', approvals);
 
