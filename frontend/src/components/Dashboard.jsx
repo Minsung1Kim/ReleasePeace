@@ -184,7 +184,8 @@ function Dashboard({
   const [auditRows, setAuditRows] = useState([]);
   const [auditForFlag, setAuditForFlag] = useState(null);
   const [showTeam, setShowTeam] = useState(false);          // TeamViewerModal
-  const [manageRolesOpen, setManageRolesOpen] = useState(false); // ManageRolesModal
+  const [showInvite, setShowInvite] = useState(false);      // Invite modal
+  const [showManageRoles, setShowManageRoles] = useState(false); // ManageRolesModal
   const [members, setMembers] = useState([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
@@ -196,10 +197,36 @@ function Dashboard({
 
   // ---------- DERIVED VALUES ----------
   const company = activeCompany || companyProp || null;
-  const userRole = company?.role || 'member';
-  const canCreate = ['owner','admin','pm'].includes(userRole);
-  const canToggle = ['owner','admin','pm','engineer'].includes(userRole);
+  const effectiveRole = company?.role || user?.role || 'member';
+  const isOwnerOrAdmin = ['owner', 'admin'].includes(effectiveRole);
+  const canCreate = ['owner','admin','pm'].includes(effectiveRole);
+  const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
   const environments = ['development', 'staging', 'production'];
+  // Invite and Manage Roles handlers
+  const openInvite = () => setShowInvite(true);
+  const openManageRoles = async () => {
+    await refreshMembers();
+    setShowManageRoles(true);
+  };
+  const handleOpenTeam = useCallback(async () => {
+    if (!company?.id) {
+      setTeamError('Select or create a company first.');
+      setShowTeam(true);
+      return;
+    }
+    setTeamError('');
+    setTeamLoading(true);
+    setShowTeam(true);
+    try {
+      const id = company?.id || localStorage.getItem('rp_company_id');
+      const list = await getMembers(id);
+      setMembers(list?.members || list || []);
+    } catch (e) {
+      setTeamError(e.message || 'Failed to load members.');
+    } finally {
+      setTeamLoading(false);
+    }
+  }, [company?.id]);
   const companyPathParam = () => {
     const id = company?.id || '';
     const sub = company?.subdomain || '';
@@ -540,12 +567,19 @@ function Dashboard({
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
               <ActivityBell authedFetch={authedFetch} />
 
-              {['owner','admin'].includes(company?.role) ? (
+              {isOwnerOrAdmin ? (
                 <>
-                  <InviteCodePopover companyId={companyId} companyName={company?.name || ''} />
                   <button
                     type="button"
-                    onClick={() => setManageRolesOpen(true)}
+                    onClick={openInvite}
+                    disabled={!company?.id}
+                    className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+                  >
+                    Invite
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openManageRoles}
                     disabled={!company?.id}
                     className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
                   >
@@ -554,7 +588,7 @@ function Dashboard({
                 </>
               ) : (
                 <button
-                  onClick={onOpenTeam}
+                  onClick={handleOpenTeam}
                   disabled={!company?.id}
                   className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
                 >
@@ -807,7 +841,27 @@ function Dashboard({
         </div>
       </div>
 
-      {/* Team / Invite modal (single modal handles both in your project) */}
+      {/* Invite modal */}
+      {showInvite && (
+        <InviteCodePopover
+          companyId={company?.id}
+          companyName={company?.name}
+          onClose={() => setShowInvite(false)}
+        />
+      )}
+
+      {/* Manage Roles modal */}
+      {showManageRoles && (
+        <ManageRolesModal
+          open
+          companyId={company?.id}
+          members={members}
+          onRoleChange={handleRoleChange}
+          onClose={() => setShowManageRoles(false)}
+        />
+      )}
+
+      {/* Team modal */}
       {showTeam && (
         <TeamViewerModal
           open
@@ -815,15 +869,6 @@ function Dashboard({
           loading={teamLoading || inviteLoading}
           error={teamError || inviteError}
           onClose={() => { setShowTeam(false); setTeamError(''); setInviteError(''); }}
-        />
-      )}
-
-      {/* Manage Roles modal */}
-      {manageRolesOpen && (
-        <ManageRolesModal
-          open
-          companyId={companyId}
-          onClose={() => setManageRolesOpen(false)}
         />
       )}
 
