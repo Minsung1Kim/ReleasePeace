@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from "react";
+import { getAuth } from 'firebase/auth';
 
 const ROLE_OPTIONS = ["owner", "admin", "pm", "engineer", "qa", "legal", "member"];
 
@@ -27,6 +28,7 @@ export default function TeamViewerModal({
   copyInvite,           // () => Promise<void>
 }) {
   const overlayRef = useRef(null);
+  const auth = getAuth();
 
   // Load invite code once when the modal opens
   useEffect(() => {
@@ -53,28 +55,29 @@ export default function TeamViewerModal({
     if (e.target === overlayRef.current) onClose?.();
   };
 
-  // Helper function to get display name for a member
-  const getMemberDisplayName = (member) => {
-    const u = member?.user || {};
+  function memberLabel(m) {
+    const u = m?.user || {};
     const pick = (...vals) =>
       vals.find(v => typeof v === 'string' && v.trim() && !/^unknown/i.test(v));
 
-    // Prefer display_name → name → username → email
-    return (
-      pick(
-        member.display_name,
-        member.displayName,
-        member.name,
-        u.display_name,
-        u.displayName,
-        u.name,
-        member.username,
-        u.username,
-        member.email,
-        u.email
-      ) || 'Unknown User'
+    const isMe =
+      String(m.user_id ?? m.id ?? u.id ?? '') === String(auth.currentUser?.uid ?? '');
+
+    // Prefer display name → name → username → email
+    const base = pick(
+      m.display_name, m.displayName, m.name,
+      u.display_name, u.displayName, u.name,
+      m.username, u.username,
+      m.email, u.email
     );
-  };
+
+    if (base) return base;
+
+    // Final fallback for yourself
+    if (isMe) return pick(auth.currentUser?.displayName, auth.currentUser?.email) || 'You';
+
+    return 'Pending member';
+  }
 
   return (
     <div
