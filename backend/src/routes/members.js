@@ -9,33 +9,41 @@ router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
   try {
     const { companyId } = req.params;
 
-    // table names from models (works with any schema/casing)
-    const T_USERS = sequelize.getQueryInterface().quoteTable(User.getTableName());
-    const T_UC    = sequelize.getQueryInterface().quoteTable(UserCompany.getTableName());
+    // 1) memberships
+    const rows = await UserCompany.findAll({
+      where: { company_id: companyId, status: 'active' },
+      raw: true
+    });
+    if (!rows.length) return res.json([]);
 
-    const rows = await sequelize.query(
-      `
-      SELECT
-        uc.user_id            AS id,
-        uc.user_id,
-        uc.company_id,
-        uc.role,
-        COALESCE(NULLIF(TRIM(u.display_name), ''), u.username, u.email, 'Unknown') AS display_name,
-        u.username,
-        u.email
-      FROM ${T_UC} AS uc
-      LEFT JOIN ${T_USERS} AS u
-        ON u.id = uc.user_id
-      WHERE uc.company_id = :companyId
-        AND uc.status = 'active'
-      ORDER BY display_name ASC
-      `,
-      { replacements: { companyId }, type: sequelize.QueryTypes.SELECT }
-    );
+    // 2) users in one shot (no JOIN / alias issues)
+    const ids = [...new Set(rows.map(r => r.user_id))];
+    const users = await User.findAll({
+      where: { id: ids },
+      attributes: ['id', 'username', 'display_name', 'email'],
+      raw: true
+    });
+    const byId = Object.fromEntries(users.map(u => [u.id, u]));
 
-    return res.json(rows);
+    // 3) shape response
+    const members = rows.map(r => {
+      const u = byId[r.user_id] || {};
+      return {
+        id: r.user_id,                 // use user_id as id
+        user_id: r.user_id,
+        company_id: r.company_id,
+        role: r.role,
+        display_name: (u.display_name || u.username || u.email || 'Unknown'),
+        username: u.username || null,
+        email: u.email || null
+      };
+    });
+
+    // sort by display_name
+    members.sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
+    return res.json(members);
   } catch (err) {
-    console.error('GET /members error:', err);
+    console.error('GET members error:', err);
     return res.status(500).json({ error: 'Failed to fetch members' });
   }
 });
