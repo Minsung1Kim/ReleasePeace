@@ -1110,7 +1110,7 @@ function CreateFlagModal({ onClose, onCreate }) {
               Cancel
             </button>
           </div>
-        </form>
+        </form> 
       </div>
     </div>
   );

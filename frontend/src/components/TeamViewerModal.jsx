@@ -24,15 +24,15 @@ export default function TeamViewerModal({
   inviteCode = "",
   onLoadInvite,         // () => Promise<void>
   onRegenerateInvite,   // () => Promise<void>
+  copyInvite,           // () => Promise<void>
 }) {
   const overlayRef = useRef(null);
 
-  // Load invite code when the modal opens (only if user can manage)
+  // Load invite code once when the modal opens
   useEffect(() => {
-    if (open && canManage && typeof onLoadInvite === "function") {
-      onLoadInvite().catch(() => {});
-    }
-  }, [open, canManage, onLoadInvite]);
+    if (!open) return;
+    onLoadInvite?.();
+  }, [open]);
 
   // Close on ESC
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function TeamViewerModal({
 
   if (!open) return null;
 
-  const copyInvite = async () => {
+  const localCopyInvite = async () => {
     if (!inviteCode) return;
     try { await navigator.clipboard.writeText(inviteCode); } catch {}
   };
@@ -71,9 +71,14 @@ export default function TeamViewerModal({
               <button className="px-3 py-1 border rounded" onClick={onClose}>Close</button>
             </div>
 
-            <input className="w-full border rounded px-3 py-2 mb-2" readOnly value={inviteCode || 'No code yet'} />
+            <input
+              className="w-full border rounded px-3 py-2 mb-2 bg-white text-gray-900 font-mono"
+              readOnly
+              value={inviteCode || 'No code yet'}
+              onFocus={(e) => e.target.select()}
+            />
             <div className="flex gap-2">
-              <button className="px-3 py-1 border rounded" onClick={() => navigator.clipboard.writeText(inviteCode || '')}>Copy</button>
+              <button className="px-3 py-1 border rounded" onClick={copyInvite || localCopyInvite} disabled={!inviteCode}>Copy</button>
               <button className="px-3 py-1 border rounded" onClick={onRegenerateInvite}>Regenerate</button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
