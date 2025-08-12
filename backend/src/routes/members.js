@@ -29,15 +29,23 @@ router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
     const members = rows.map(r => {
       const u = byId[r.user_id] || {};
       return {
-        id: r.user_id,
+        id: r.user_id,                 // use user_id as id
         user_id: r.user_id,
         company_id: r.company_id,
         role: r.role,
-        display_name: (u.display_name || u.name || u.username || u.email || 'Unknown'), // <-- include 'name'
+        display_name: (u.display_name || u.username || u.email || 'Unknown'),
         username: u.username || null,
         email: u.email || null
       };
     });
+
+    // HOTFIX: if the DB doesn't have a user row yet, at least show the current user nicely
+    for (const m of members) {
+      if ((m.display_name === 'Unknown' || !m.display_name) && m.user_id === req.user?.id) {
+        m.display_name = req.user?.name || req.user?.display_name || req.user?.email || 'You';
+        m.email = m.email || req.user?.email || null;
+      }
+    }
 
     // sort by display_name
     members.sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
