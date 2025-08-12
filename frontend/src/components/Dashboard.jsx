@@ -1,71 +1,16 @@
-// ---------- Invite Code Popover ----------
-function InviteCodePopover({ companyId, companyName }) {
-  const [open, setOpen] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
-
-  async function loadInvite() {
-    const c = await companies.get(companyId);   // expects { invite_code }
-    setInviteCode((c.invite_code || '').trim());
-  }
-
-  async function regenerate() {
-    if (!confirm('Regenerate invite? Old links will stop working.')) return;
-    const updated = await companies.regenerateInvite(companyId); // { invite_code }
-    setInviteCode((updated.invite_code || '').trim());
-  }
-  async function copyCode() {
-    if (!inviteCode) return;
-    await navigator.clipboard.writeText(inviteCode);
-  }
-
-  useEffect(() => {
-    if (open && companyId) loadInvite();
-  }, [open, companyId]);
-
-  return (
-    <div className="relative inline-block">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-        disabled={!companyId}
-      >
-        Invite
-      </button>
-      {open && (
-        <div className="absolute right-0 mt-2 w-80 max-w-xs rounded-xl border bg-white shadow-xl z-50 p-4">
-          <div className="font-semibold mb-2">Invite to {companyName}</div>
-          <div className="mb-2">
-            <input
-              type="text"
-              value={inviteCode}
-              readOnly
-              className="w-full px-2 py-1 border rounded text-sm"
-              onFocus={e => e.target.select()}
-            />
-          </div>
-          <div className="flex gap-2">
-            <button className="px-2 py-1 border rounded text-xs" onClick={copyCode} disabled={!inviteCode}>Copy</button>
-            <button className="px-2 py-1 border rounded text-xs" onClick={regenerate}>Regenerate</button>
-            <button className="px-2 py-1 border rounded text-xs" onClick={() => setOpen(false)}>Close</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-// src/components/Dashboard.jsx
+// frontend/src/components/Dashboard.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getAuth, onIdTokenChanged } from 'firebase/auth';
+
 import { companies, getMembers } from '../utils/api';
 import * as api from '../utils/api';
 import { config } from '../config';
-import ManageRolesModal from './ManageRolesModal.jsx';
+
 import TeamViewerModal from './TeamViewerModal.jsx';
 import ApprovalBadge from './ApprovalBadge';
 import ApprovalsPanel from './ApprovalsPanel';
 
-// ---------- Activity Bell ----------
+// ---------- Small recent-activity popover (bell) ----------
 function ActivityBell({ authedFetch }) {
   const [open, setOpen] = useState(false);
   const [logs, setLogs] = useState([]);
@@ -162,100 +107,61 @@ function ActivityBell({ authedFetch }) {
 }
 
 // ---------- Main Dashboard ----------
-function Dashboard({
+export default function Dashboard({
   user,
   token,
   getToken,
   onLogout,
   company: companyProp,
-  onSwitchCompany, // callback provided by parent
+  onSwitchCompany, // optional callback from parent
 }) {
-  // ---------- STATE HOOKS (top of component) ----------
+  // --- unified people modal state (Invite | Team) ---
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [peopleView, setPeopleView] = useState('invite'); // 'invite' | 'team'
+
+  // core state
   const [activeCompany, setActiveCompany] = useState(null);
+  const [apiStatus, setApiStatus] = useState('checking...');
   const [flags, setFlags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeEnvironment, setActiveEnvironment] = useState('production');
   const [showCreateFlag, setShowCreateFlag] = useState(false);
+
+  // approvals + audit
   const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [auditOpen, setAuditOpen] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditRows, setAuditRows] = useState([]);
   const [auditForFlag, setAuditForFlag] = useState(null);
-  const [teamOpen, setTeamOpen] = useState(false);
+
+  // recent
+  const [recent, setRecent] = useState([]);
+  const [recentLoading, setRecentLoading] = useState(false);
+
+  // team/invite
   const [members, setMembers] = useState([]);
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [inviteCode, setInviteCode] = useState('');
-  const [recentLoading, setRecentLoading] = useState(false);
-  const [recent, setRecent] = useState([]);
-  const [apiStatus, setApiStatus] = useState('checking...');
 
-  // ---------- DERIVED VALUES ----------
+  // --- derived values ---
   const company = activeCompany || companyProp || null;
-  const stored = (() => { try { return JSON.parse(localStorage.getItem('releasepeace_company')) || null } catch { return null } })();
   const effectiveRole = (company?.role || user?.role || '').toLowerCase();
   const userRole = effectiveRole;
-  const isOwnerOrAdmin = ['owner', 'admin'].includes(effectiveRole);
   const canCreate = ['owner','admin','pm'].includes(effectiveRole);
   const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
-  const canManage = ['owner','admin'].includes(company?.role);
+  const canManage = ['owner','admin'].includes(effectiveRole);
   const environments = ['development', 'staging', 'production'];
-  // Team modal handler
-  const openTeam = async () => {
-    if (!company?.id) {
-      setTeamOpen(true);
-      setTeamError('Select or create a company first.');
-      return;
-    }
-    setTeamOpen(true);
-    setTeamError('');
-    setTeamLoading(true);
-    try {
-      const list = await getMembers(company.id);
-      setMembers(list?.members || list || []);
-    } catch (e) {
-      setTeamError(e.message || 'Failed to load members.');
-    } finally {
-      setTeamLoading(false);
-    }
-  };
+  const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
 
-  // Invite modal handler
-  const openInvite = async () => {
-    if (!company?.id) {
-      alert('Select or create a company first.');
-      return;
-    }
-    try {
-      await loadInvite(); // fetches and sets inviteCode
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setTeamOpen(true); // show TeamViewerModal (renders invite section)
-    }
-  };
+  // --- helpers ---
   const companyPathParam = () => {
     const id = company?.id || '';
     const sub = company?.subdomain || '';
     const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRe.test(id) ? id : (sub || id);
-  };
-  const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
-
-  // ---------- HELPERS & CALLBACKS ----------
-  const normalizeCompany = (resp) => {
-    if (!resp) return null;
-    if (resp.id) return resp;                                   // already a company
-    if (resp.company) return resp.company;                      // { company }
-    if (Array.isArray(resp.companies) && resp.companies.length) {
-      const saved = localStorage.getItem('rp_company_id');
-      return resp.companies.find(c => c.id === saved) || resp.companies[0];
-    }
-    // membership shape: { companyId, role }
-    if (resp.companyId) return { id: resp.companyId, role: resp.role };
-    return null;
   };
 
   const getFreshToken = useCallback(async () => {
@@ -263,10 +169,8 @@ function Dashboard({
     const u = auth.currentUser;
     if (!u) return null;
     try {
-      // force refresh
-      return await u.getIdToken(true);
+      return await u.getIdToken(true); // force refresh
     } catch {
-      // fallback
       return await u.getIdToken();
     }
   }, []);
@@ -286,21 +190,24 @@ function Dashboard({
     });
   }, [company?.id, getToken, getFreshToken]);
 
-  const safeJsonGet = async (res) => { try { return await res.json(); } catch { return null; } };
+  const normalizeCompany = (resp) => {
+    if (!resp) return null;
+    if (resp.id) return resp;
+    if (resp.company) return resp.company;
+    if (Array.isArray(resp.companies) && resp.companies.length) {
+      const saved = localStorage.getItem('rp_company_id');
+      return resp.companies.find(c => c.id === saved) || resp.companies[0];
+    }
+    if (resp.companyId) return { id: resp.companyId, role: resp.role };
+    return null;
+  };
 
-  const loadActiveCompany = React.useCallback(async () => {
+  const loadActiveCompany = useCallback(async () => {
     try {
-      // who am I a member of?
-      const mine = await authedFetch('/api/companies/mine');   // returns company / companies / membership
-      let normalized;
-      if (mine?.company) {
-        normalized = { ...mine.company, role: mine.role };
-      } else {
-        normalized = mine;
-      }
+      const mine = await authedFetch('/api/companies/mine'); // could be {company}, {companies}, or company
+      const normalized = mine?.company ? {...mine.company, role: mine.role} : mine;
       if (!normalized?.id) return;
 
-      // fetch full company details (name, plan, role, members, etc.)
       const full = await authedFetch(`/api/companies/${normalized.id}`);
       const c = normalizeCompany(full) || normalized;
 
@@ -314,16 +221,14 @@ function Dashboard({
     }
   }, [authedFetch]);
 
-  // ---------- boot & company sync ----------
+  // --- boot + token refresh + role sync ---
   useEffect(() => {
     setActiveCompany(companyProp || null);
     if (companyProp?.id) localStorage.setItem('rp_company_id', companyProp.id);
   }, [companyProp?.id]);
 
-  // Load active company on mount and after token refresh
   useEffect(() => { loadActiveCompany(); }, [loadActiveCompany]);
 
-  // Keep Firebase fresh (avoid first-load 401)
   useEffect(() => {
     const auth = getAuth();
     const unsub = onIdTokenChanged(auth, async (u) => {
@@ -333,11 +238,8 @@ function Dashboard({
       }
     });
     return unsub;
-  }, []);
+  }, [loadActiveCompany]);
 
-  // Remove legacy effect: now handled by loadActiveCompany
-
-  // Poll role changes
   useEffect(() => {
     let timer;
     const syncRole = async () => {
@@ -354,9 +256,9 @@ function Dashboard({
     syncRole();
     timer = setInterval(syncRole, 30000);
     return () => clearInterval(timer);
-  }, [company?.id]);
+  }, [company?.id, authedFetch, company?.role]);
 
-  // health + initial data
+  // --- health + initial data ---
   useEffect(() => {
     fetch(`${config.apiUrl}/health`)
       .then(() => setApiStatus('✅ Connected!'))
@@ -364,16 +266,17 @@ function Dashboard({
     fetchFlags();
     loadRecent();
     if (company?.id) localStorage.setItem('rp_company_id', company.id);
-  }, [company, token]);
+  }, [company, token]); // eslint-disable-line
 
-  // ---------- data loaders ----------
+  // --- loaders ---
   const fetchFlags = async () => {
     try {
       setLoading(true);
       const data = await authedFetch('/api/flags');
       setFlags(data.flags ?? data ?? []);
+      setError('');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to load flags');
       console.error('Failed to load flags:', err);
     } finally {
       setLoading(false);
@@ -435,66 +338,72 @@ function Dashboard({
     }
   };
 
-  // ---------- team / invite / manage roles ----------
-  // Refresh after changes
+  // --- team & invite ---
   const refreshMembers = async () => {
+    setTeamLoading(true);
+    setTeamError('');
     try {
+      // prefer your helper
       const list = await getMembers(company.id);
       setMembers(list?.members || list || []);
-    } catch {}
+    } catch (e) {
+      // fallback direct fetch if helper fails
+      try {
+        const data = await authedFetch(`/api/companies/${company.id}/members`);
+        setMembers(data?.members || []);
+      } catch (err) {
+        setTeamError(err.message || 'Failed to load members');
+      }
+    } finally {
+      setTeamLoading(false);
+    }
   };
 
-  // Role update helper
-  const changeRole = async (userId, newRole) => {
-    await api.updateMemberRole(company.id, userId, newRole);
-    await refreshMembers();
+  const handleRoleChange = async (userId, newRole) => {
+    try {
+      await api.updateMemberRole(company.id, userId, newRole);
+      await refreshMembers();
+    } catch (e) {
+      alert(e.message || 'Failed to update role');
+    }
   };
 
-  // Remove member
-  const removeFromCompany = async (userId) => {
-    await api.removeMember(company.id, userId);
-    await refreshMembers();
+  const handleRemoveMember = async (userId) => {
+    if (!window.confirm('Remove this member from the company?')) return;
+    try {
+      await api.removeMember(company.id, userId);
+      await refreshMembers();
+    } catch (e) {
+      alert(e.message || 'Failed to remove member');
+    }
   };
 
-  // Invite code helpers
   const loadInvite = async () => {
     const c = await companies.get(company.id);
     setInviteCode((c.invite_code || '').trim());
   };
-  const regenInvite = async () => {
+
+  const onRegenerateInvite = async () => {
+    if (!window.confirm('Regenerate invite? Old links will stop working.')) return;
     const c = await companies.regenerateInvite(company.id);
     setInviteCode((c.invite_code || '').trim());
   };
 
-  const onOpenTeam = useCallback(async () => {
-    if (!company?.id) {
-      setTeamError('Select or create a company first.');
-      setShowTeam(true);
-      return;
-    }
-    setTeamError('');
-    setTeamLoading(true);
-    setShowTeam(true);
-    try {
-      const id = company?.id || localStorage.getItem('rp_company_id');
-      const list = await getMembers(id);
-      setMembers(list?.members || list || []);
-    } catch (e) {
-      setTeamError(e.message || 'Failed to load members.');
-    } finally {
-      setTeamLoading(false);
-    }
-  }, [company?.id]);
+  const openInvite = async () => {
+    if (!company?.id) return alert('Select or create a company first.');
+    await loadInvite();
+    setPeopleView('invite');
+    setPeopleOpen(true);
+  };
 
-  const onOpenInvite = useCallback(async () => {
-    // If your TeamViewerModal has tabs, you can set an invite tab here with a ref/prop.
-    // We just open the same modal and let the user pick invite inside it.
-    setInviteError('');
-    setInviteLoading(false);
-    setShowTeam(true);
-  }, []);
+  const openTeam = async () => {
+    if (!company?.id) return alert('Select or create a company first.');
+    await refreshMembers();
+    setPeopleView('team');
+    setPeopleOpen(true);
+  };
 
-  // ---------- flags actions ----------
+  // --- flags actions ---
   const createFlag = async (flagData) => {
     try {
       const data = await authedFetch('/api/flags', {
@@ -505,14 +414,13 @@ function Dashboard({
       if (!data?.success && !newFlag?.id) {
         throw new Error(data?.message || 'Failed to create flag');
       }
-      if (newFlag?.id) {
-        setFlags(prev => [newFlag, ...prev]);
-      }
+      // optimistic and then refresh for correctness
+      if (newFlag?.id) setFlags(prev => [newFlag, ...prev]);
       await fetchFlags();
       setShowCreateFlag(false);
-    } catch (err) {
-      console.error('Failed to create flag:', err);
-      alert(err.message || 'Failed to create flag');
+    } catch (e) {
+      console.error(e);
+      alert(e.message || 'Failed to create flag');
     }
   };
 
@@ -538,9 +446,8 @@ function Dashboard({
         method: 'PUT',
         body: { is_enabled: enabling, reason }
       });
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to update flag state');
-      }
+
+      if (!data.success) throw new Error(data.message || 'Failed to update flag state');
       await fetchFlags();
     } catch (err) {
       console.error('Failed to toggle flag:', err);
@@ -548,7 +455,23 @@ function Dashboard({
     }
   };
 
-  // ---------- helpers ----------
+  const rollbackFlag = async (flagId) => {
+    const why = window.prompt('Emergency reason for rollback (disables in all environments):') || '';
+    if (!window.confirm('Disable this flag in ALL environments?')) return;
+    try {
+      const data = await authedFetch(`/api/flags/${flagId}/rollback`, {
+        method: 'POST',
+        body: { reason: why }
+      });
+      if (!data?.success) throw new Error(data?.message || 'Rollback failed');
+      await fetchFlags();
+      alert('Rollback completed.');
+    } catch (e) {
+      alert(e.message || 'Rollback failed');
+    }
+  };
+
+  // --- UI helpers ---
   const getRiskColor = (risk) => {
     switch (risk) {
       case 'critical': return 'bg-red-100 text-red-800';
@@ -558,7 +481,6 @@ function Dashboard({
       default: return 'bg-gray-100 text-gray-800';
     }
   };
-
   const getTypeColor = (type) => {
     switch (type) {
       case 'killswitch': return 'bg-red-100 text-red-800';
@@ -568,7 +490,6 @@ function Dashboard({
       default: return 'bg-gray-100 text-gray-800';
     }
   };
-
   const getEnvironmentStats = (flag) => {
     const envs = flag.states || [];
     const enabled = envs.filter(s => s.is_enabled).length;
@@ -576,7 +497,25 @@ function Dashboard({
     return { enabled, total };
   };
 
-  // ---------- render ----------
+  // --- Early exit if no company yet ---
+  if (!company) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-gray-500">
+        <div className="text-center">
+          <div className="text-lg mb-3">No company selected</div>
+          <div className="text-sm mb-4">Create or join a company to get started.</div>
+          <button
+            onClick={() => setPeopleOpen(true)}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm hover:bg-blue-700"
+          >
+            Open Team / Invite
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Render ---
   return (
     <div className="min-h-screen bg-[var(--rp-bg)] text-[var(--rp-fg)]">
       {/* Header */}
@@ -594,35 +533,35 @@ function Dashboard({
                     company?.plan === 'pro' ? 'bg-blue-100 text-blue-800' :
                     'bg-green-100 text-green-800'
                   }`}>
-                    {company?.plan || 'unknown'}
+                    {company?.plan || 'starter'}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <div className="text-sm text-gray-500">API: {apiStatus}</div>
               <ActivityBell authedFetch={authedFetch} />
 
-            {canManage && (
+              {/* Separate buttons as requested */}
               <button
                 type="button"
                 onClick={openInvite}
+                disabled={!company?.id}
                 className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
               >
                 Invite
               </button>
-            )}
+              <button
+                type="button"
+                onClick={openTeam}
+                disabled={!company?.id}
+                className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
+              >
+                Team
+              </button>
 
-            <button
-              type="button"
-              onClick={openTeam}
-              className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
-            >
-              Team
-            </button>
-
-              {['qa','legal','owner','admin'].includes(user?.role) && (
+              {['qa','legal','owner','admin'].includes(userRole) && (
                 <button
                   onClick={openApprovals}
                   className="px-3 py-2 rounded-md border text-sm hover:bg-gray-100"
@@ -632,15 +571,15 @@ function Dashboard({
               )}
 
               <button
-                onClick={() => onSwitchCompany?.()}
+                onClick={() => onSwitchCompany && onSwitchCompany()}
                 className="text-sm text-blue-600 hover:text-blue-500 px-3 py-1 border border-blue-200 rounded-md hover:bg-blue-50"
               >
                 Switch Company
               </button>
 
               <div className="text-sm text-gray-500 border-l pl-4">
-                <div className="font-medium">{user?.display_name || user?.username}</div>
-                <div className="text-xs">{user?.role} • {company?.role}</div>
+                <div className="font-medium">{user?.display_name || user?.username || 'User'}</div>
+                <div className="text-xs">{userRole || 'member'}</div>
               </div>
               <button
                 onClick={onLogout}
@@ -653,6 +592,7 @@ function Dashboard({
         </div>
       </header>
 
+      {/* Body */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Quick Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
@@ -777,6 +717,8 @@ function Dashboard({
                           Created by {flag.creator?.display_name || flag.creator?.username || 'Unknown'} •
                           {' '}{envStats.enabled}/{envStats.total} environments enabled
                         </div>
+
+                        {/* Approval status helper */}
                         <ApprovalBadge flagId={flag.id} companyId={company?.id} />
                       </div>
 
@@ -808,22 +750,7 @@ function Dashboard({
 
                               {['owner','pm'].includes(userRole) && (
                                 <button
-                                  onClick={async () => {
-                                    const why = window.prompt('Emergency reason for rollback (disables in all environments):') || '';
-                                    if (!window.confirm('Disable this flag in ALL environments?')) return;
-                                    try {
-                                      const res = await authedFetch(`/api/flags/${flag.id}/rollback`, {
-                                        method: 'POST',
-                                        body: { reason: why }
-                                      });
-                                      const data = res;
-                                      if (!data?.success) throw new Error(data?.message || 'Rollback failed');
-                                      await fetchFlags();
-                                      alert('Rollback completed.');
-                                    } catch (e) {
-                                      alert(e.message || 'Rollback failed');
-                                    }
-                                  }}
+                                  onClick={() => rollbackFlag(flag.id)}
                                   className="px-3 py-1 rounded text-xs font-medium border border-red-300 hover:bg-red-50 ml-2"
                                   title="Disable in all environments"
                                 >
@@ -865,28 +792,39 @@ function Dashboard({
             </div>
           )}
         </div>
+
+        {/* QA ApprovalsPanel (optional extra view) */}
+        {user?.roles?.includes?.('QA') && (
+          <div style={{ marginTop: 16 }}>
+            <ApprovalsPanel token={token} role="QA" />
+          </div>
+        )}
       </div>
 
+      {/* Modals */}
 
-      {/* Single Team modal with all management features */}
-      {teamOpen && (
+      {/* Unified Team + Invite modal */}
+      {peopleOpen && (
         <TeamViewerModal
           open
-          companyId={company?.id}
+          view={peopleView}                 // 'invite' or 'team'
+          onClose={() => setPeopleOpen(false)}
+          companyId={companyId}
+          // invite props
+          inviteCode={inviteCode}
+          onLoadInvite={loadInvite}
+          onRegenerateInvite={onRegenerateInvite}
+          // team props
           members={members}
           loading={teamLoading}
           error={teamError}
-          canManage={['owner','admin'].includes(effectiveRole)}
-          onChangeRole={changeRole}
-          onRemoveMember={removeFromCompany}
-          inviteCode={inviteCode}
-          onLoadInvite={loadInvite}
-          onRegenerateInvite={regenInvite}
-          onClose={() => setTeamOpen(false)}
+          canManage={canManage}
+          onChangeRole={handleRoleChange}
+          onRemoveMember={handleRemoveMember}
         />
       )}
 
-      {/* Approvals Panel */}
+      {/* Approvals panel */}
       {approvalsOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setApprovalsOpen(false)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
@@ -925,14 +863,7 @@ function Dashboard({
         </div>
       )}
 
-      {/* QA ApprovalsPanel (bottom of dashboard) */}
-      {user?.roles?.includes?.('QA') && (
-        <div style={{ marginTop: 16 }}>
-          <ApprovalsPanel token={token} role="QA" />
-        </div>
-      )}
-
-      {/* Audit Drawer */}
+      {/* Audit drawer */}
       {auditOpen && (
         <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setAuditOpen(false)}>
           <div className="absolute right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl p-4" onClick={e => e.stopPropagation()}>
@@ -968,7 +899,7 @@ function Dashboard({
 }
 
 // ---------- Create Flag Modal ----------
-const CreateFlagModal = ({ onClose, onCreate }) => {
+function CreateFlagModal({ onClose, onCreate }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -982,12 +913,12 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const payload = {
-      ...formData,
-      tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean)
-    };
     try {
-      await onCreate(payload);
+      const toSend = {
+        ...formData,
+        tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean)
+      };
+      await onCreate(toSend);
       onClose();
     } catch (err) {
       console.error('Create flag error:', err);
@@ -998,8 +929,8 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+      <div className="bg-white rounded-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
         <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Feature Flag</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -1008,32 +939,30 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none"
               placeholder="my_new_feature"
               required
               disabled={loading}
             />
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none"
               rows="3"
               placeholder="Describe what this flag controls..."
               disabled={loading}
             />
           </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
               <select
                 value={formData.flag_type}
                 onChange={(e) => setFormData({ ...formData, flag_type: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none"
                 disabled={loading}
               >
                 <option value="rollout">Rollout</option>
@@ -1047,7 +976,7 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
               <select
                 value={formData.risk_level}
                 onChange={(e) => setFormData({ ...formData, risk_level: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none"
                 disabled={loading}
               >
                 <option value="low">Low</option>
@@ -1057,26 +986,24 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
               </select>
             </div>
           </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
             <input
               type="text"
               value={formData.tags}
               onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none"
               placeholder="ui, checkout, experiment"
               disabled={loading}
             />
           </div>
-
           <div className="flex items-center">
             <input
-              type="checkbox"
               id="requires_approval"
+              type="checkbox"
               checked={formData.requires_approval}
               onChange={(e) => setFormData({ ...formData, requires_approval: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded"
               disabled={loading}
             />
             <label htmlFor="requires_approval" className="ml-2 block text-sm text-gray-700">
@@ -1088,7 +1015,7 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
             <button
               type="submit"
               disabled={loading || !formData.name.trim()}
-              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Flag'}
             </button>
@@ -1105,6 +1032,4 @@ const CreateFlagModal = ({ onClose, onCreate }) => {
       </div>
     </div>
   );
-};
-
-export default Dashboard;
+}
