@@ -146,6 +146,12 @@ export default function Dashboard({
   const [teamError, setTeamError] = useState('');
   const [inviteCode, setInviteCode] = useState('');
 
+  // A. Add a copy handler that uses your current inviteCode state
+  const copyInvite = React.useCallback(async () => {
+    if (!inviteCode) return;
+    try { await navigator.clipboard.writeText(inviteCode); } catch {}
+  }, [inviteCode]);
+
   // --- derived values ---
   const company = activeCompany || companyProp || null;
   const effectiveRole = (company?.role || user?.role || '').toLowerCase();
@@ -343,14 +349,26 @@ export default function Dashboard({
     setTeamLoading(true);
     setTeamError('');
     try {
-      // prefer your helper
       const list = await getMembers(company.id);
-      setMembers(list?.members || list || []);
+      const raw = list?.members || list || [];
+      const normalized = raw.map(m => ({
+        ...m,
+        display_name: m.display_name || m.user?.display_name || m.user?.name || '',
+        username:     m.username     || m.user?.username     || '',
+        email:        m.email        || m.user?.email        || '',
+      }));
+      setMembers(normalized);
     } catch (e) {
-      // fallback direct fetch if helper fails
       try {
         const data = await authedFetch(`/api/companies/${company.id}/members`);
-        setMembers(data?.members || []);
+        const raw = data?.members || [];
+        const normalized = raw.map(m => ({
+          ...m,
+          display_name: m.display_name || m.user?.display_name || m.user?.name || '',
+          username:     m.username     || m.user?.username     || '',
+          email:        m.email        || m.user?.email        || '',
+        }));
+        setMembers(normalized);
       } catch (err) {
         setTeamError(err.message || 'Failed to load members');
       }
@@ -380,7 +398,20 @@ export default function Dashboard({
 
   const loadInvite = async () => {
     const c = await companies.get(company.id);
-    setInviteCode((c.invite_code || '').trim());
+    const code = (c?.invite_code || '').trim();
+
+    if (code) {
+      setInviteCode(code);
+      return;
+    }
+
+    // First-time companies usually have no code -> create one
+    try {
+      const r = await companies.regenerateInvite(company.id);
+      setInviteCode((r?.invite_code || '').trim());
+    } catch {
+      setInviteCode('');
+    }
   };
 
   const onRegenerateInvite = async () => {
@@ -814,6 +845,7 @@ export default function Dashboard({
           inviteCode={inviteCode}
           onLoadInvite={loadInvite}
           onRegenerateInvite={onRegenerateInvite}
+          copyInvite={copyInvite}
           // team props
           members={members}
           loading={teamLoading}
