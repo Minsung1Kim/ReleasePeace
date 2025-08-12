@@ -10,26 +10,37 @@ router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
   try {
     const { companyId } = req.params;
 
-    // verify the company exists (optional but nice)
     const company = await Company.findByPk(companyId);
     if (!company) return res.status(404).json({ error: 'Company not found' });
 
-    // get members with user info
     const rows = await UserCompany.findAll({
       where: { company_id: companyId, status: 'active' },
-      include: [{ model: User, as: 'user', attributes: ['id','username','display_name','email'] }],
-      order: [[{ model: User, as: 'user' }, 'display_name', 'ASC']],
+      include: [
+        {
+          model: User,
+          // don't force an alias; accept whatever association was defined
+          required: false,
+          attributes: ['id', 'username', 'display_name', 'email']
+        }
+      ],
+      // order by either alias shape
+      order: [
+        [User, 'display_name', 'ASC']
+      ]
     });
 
-    const members = rows.map(r => ({
-      id: r.user?.id,
-      username: r.user?.username,
-      display_name: (r.user?.display_name || r.user?.username || r.user?.email || 'Unknown'),
-      email: r.user?.email || null,
-      role: r.role,
-      company_id: r.company_id,
-      user_id: r.user_id,
-    }));
+    const members = rows.map(r => {
+      const u = r.user || r.User || null; // handle alias differences
+      return {
+        id: u?.id || r.user_id, // user id
+        user_id: r.user_id,
+        company_id: r.company_id,
+        role: r.role,
+        display_name: (u?.display_name || u?.username || u?.email || 'Unknown'),
+        username: u?.username || null,
+        email: u?.email || null,
+      };
+    });
 
     return res.json(members);
   } catch (err) {
