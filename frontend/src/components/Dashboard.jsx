@@ -145,12 +145,35 @@ export default function Dashboard({
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamError, setTeamError] = useState('');
   const [inviteCode, setInviteCode] = useState('');
+  const inviteLoadInFlight = useRef(false);
 
-  // A. Add a copy handler that uses your current inviteCode state
-  const copyInvite = React.useCallback(async () => {
+  const loadInvite = useCallback(async () => {
+    if (!company?.id || inviteLoadInFlight.current) return;
+    inviteLoadInFlight.current = true;
+    try {
+      const c = await companies.get(company.id);
+      let code = (c?.invite_code || '').trim();
+      // Generate once if missing
+      if (!code) {
+        const r = await companies.regenerateInvite(company.id);
+        code = (r?.invite_code || '').trim();
+      }
+      setInviteCode(code);
+    } finally {
+      inviteLoadInFlight.current = false;
+    }
+  }, [company?.id]);
+
+  const copyInvite = useCallback(async () => {
     if (!inviteCode) return;
     try { await navigator.clipboard.writeText(inviteCode); } catch {}
   }, [inviteCode]);
+
+  const onRegenerateInvite = useCallback(async () => {
+    if (!company?.id) return;
+    const r = await companies.regenerateInvite(company.id);
+    setInviteCode((r?.invite_code || '').trim());
+  }, [company?.id]);
 
   // --- derived values ---
   const company = activeCompany || companyProp || null;
@@ -345,7 +368,7 @@ export default function Dashboard({
   };
 
   // --- team & invite ---
-  const refreshMembers = async () => {
+  const refreshMembers = useCallback(async () => {
     setTeamLoading(true);
     setTeamError('');
     try {
@@ -359,22 +382,24 @@ export default function Dashboard({
       }));
       setMembers(normalized);
     } catch (e) {
-      try {
-        const data = await authedFetch(`/api/companies/${company.id}/members`);
-        const raw = data?.members || [];
-        const normalized = raw.map(m => ({
-          ...m,
-          display_name: m.display_name || m.user?.display_name || m.user?.name || '',
-          username:     m.username     || m.user?.username     || '',
-          email:        m.email        || m.user?.email        || '',
-        }));
-        setMembers(normalized);
-      } catch (err) {
-        setTeamError(err.message || 'Failed to load members');
-      }
+      setTeamError(e.message || 'Failed to load members.');
     } finally {
       setTeamLoading(false);
     }
+  }, [company?.id]);
+
+  const openInvite = async () => {
+    if (!company?.id) return alert('Select or create a company first.');
+    await loadInvite();                 // guarded, runs once
+    setPeopleView('invite');
+    setPeopleOpen(true);
+  };
+
+  const openTeam = async () => {
+    if (!company?.id) return alert('Select or create a company first.');
+    await refreshMembers();
+    setPeopleView('team');
+    setPeopleOpen(true);
   };
 
   const handleRoleChange = async (userId, newRole) => {
@@ -394,44 +419,6 @@ export default function Dashboard({
     } catch (e) {
       alert(e.message || 'Failed to remove member');
     }
-  };
-
-  const loadInvite = async () => {
-    const c = await companies.get(company.id);
-    const code = (c?.invite_code || '').trim();
-
-    if (code) {
-      setInviteCode(code);
-      return;
-    }
-
-    // First-time companies usually have no code -> create one
-    try {
-      const r = await companies.regenerateInvite(company.id);
-      setInviteCode((r?.invite_code || '').trim());
-    } catch {
-      setInviteCode('');
-    }
-  };
-
-  const onRegenerateInvite = async () => {
-    if (!window.confirm('Regenerate invite? Old links will stop working.')) return;
-    const c = await companies.regenerateInvite(company.id);
-    setInviteCode((c.invite_code || '').trim());
-  };
-
-  const openInvite = async () => {
-    if (!company?.id) return alert('Select or create a company first.');
-    await loadInvite();
-    setPeopleView('invite');
-    setPeopleOpen(true);
-  };
-
-  const openTeam = async () => {
-    if (!company?.id) return alert('Select or create a company first.');
-    await refreshMembers();
-    setPeopleView('team');
-    setPeopleOpen(true);
   };
 
   // --- flags actions ---
