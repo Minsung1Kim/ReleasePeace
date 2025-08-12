@@ -55,13 +55,24 @@ export default function TeamViewerModal({
 
   // Helper function to get display name for a member
   const getMemberDisplayName = (member) => {
-    // Try display_name first, then name, then username, then email, then fallback
+    const u = member?.user || {};
+    const pick = (...vals) =>
+      vals.find(v => typeof v === 'string' && v.trim() && !/^unknown/i.test(v));
+
+    // Prefer display_name → name → username → email
     return (
-      (member.display_name && member.display_name.trim() && member.display_name !== 'Unknown') ||
-      (member.name && member.name.trim()) ||
-      (member.username && member.username.trim()) ||
-      (member.email && member.email.trim()) ||
-      'Unknown User'
+      pick(
+        member.display_name,
+        member.displayName,
+        member.name,
+        u.display_name,
+        u.displayName,
+        u.name,
+        member.username,
+        u.username,
+        member.email,
+        u.email
+      ) || 'Unknown User'
     );
   };
 
