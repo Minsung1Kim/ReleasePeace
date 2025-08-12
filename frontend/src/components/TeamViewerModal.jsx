@@ -104,7 +104,11 @@ export default function TeamViewerModal({
                   <li key={m.id} className="py-2 flex items-center justify-between">
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">
-                        {m.display_name || m.username || m.email || 'Unknown'}
+                        {(m.display_name && m.display_name.trim())
+                          || (m.name && m.name.trim())
+                          || m.username
+                          || m.email
+                          || 'Unknown'}
                       </div>
                       {m.email && <div className="text-xs text-gray-500 truncate">{m.email}</div>}
                     </div>

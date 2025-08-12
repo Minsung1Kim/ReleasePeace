@@ -16,11 +16,11 @@ router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
     });
     if (!rows.length) return res.json([]);
 
-    // 2) users in one shot (no JOIN / alias issues)
+    // 2) users in one shot (no JOIN)
     const ids = [...new Set(rows.map(r => r.user_id))];
     const users = await User.findAll({
       where: { id: ids },
-      attributes: ['id', 'username', 'display_name', 'email'],
+      attributes: ['id', 'username', 'display_name', 'name', 'email'], // <-- add 'name'
       raw: true
     });
     const byId = Object.fromEntries(users.map(u => [u.id, u]));
@@ -29,11 +29,11 @@ router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
     const members = rows.map(r => {
       const u = byId[r.user_id] || {};
       return {
-        id: r.user_id,                 // use user_id as id
+        id: r.user_id,
         user_id: r.user_id,
         company_id: r.company_id,
         role: r.role,
-        display_name: (u.display_name || u.username || u.email || 'Unknown'),
+        display_name: (u.display_name || u.name || u.username || u.email || 'Unknown'), // <-- include 'name'
         username: u.username || null,
         email: u.email || null
       };
