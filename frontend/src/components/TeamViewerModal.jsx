@@ -53,6 +53,18 @@ export default function TeamViewerModal({
     if (e.target === overlayRef.current) onClose?.();
   };
 
+  // Helper function to get display name for a member
+  const getMemberDisplayName = (member) => {
+    // Try display_name first, then name, then username, then email, then fallback
+    return (
+      (member.display_name && member.display_name.trim() && member.display_name !== 'Unknown') ||
+      (member.name && member.name.trim()) ||
+      (member.username && member.username.trim()) ||
+      (member.email && member.email.trim()) ||
+      'Unknown User'
+    );
+  };
+
   return (
     <div
       ref={overlayRef}
@@ -82,7 +94,7 @@ export default function TeamViewerModal({
               <button className="px-3 py-1 border rounded" onClick={onRegenerateInvite}>Regenerate</button>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Share this code with a teammate. They can join via the “Join Company” screen.
+              Share this code with a teammate. They can join via the "Join Company" screen.
             </p>
           </>
         )}
@@ -99,46 +111,62 @@ export default function TeamViewerModal({
             {loading ? (
               <div className="text-sm text-gray-500 p-2">Loading…</div>
             ) : (
-              <ul className="divide-y">
-                {(members || []).map(m => (
-                  <li key={m.id} className="py-2 flex items-center justify-between">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">
-                        {(m.display_name && m.display_name.trim())
-                          || (m.name && m.name.trim())
-                          || m.username
-                          || m.email
-                          || 'Unknown'}
-                      </div>
-                      {m.email && <div className="text-xs text-gray-500 truncate">{m.email}</div>}
-                    </div>
+              <>
+                {(!members || members.length === 0) ? (
+                  <div className="text-sm text-gray-500 p-4 text-center">No team members found</div>
+                ) : (
+                  <ul className="divide-y">
+                    {members.map(m => {
+                      const displayName = getMemberDisplayName(m);
+                      const memberId = m.id || m.user_id;
+                      
+                      return (
+                        <li key={memberId} className="py-3 flex items-center justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                              {displayName}
+                            </div>
+                            {m.email && m.email.trim() && (
+                              <div className="text-xs text-gray-500 truncate mt-1">{m.email}</div>
+                            )}
+                            {m.username && m.username.trim() && m.username !== displayName && (
+                              <div className="text-xs text-gray-400 truncate">@{m.username}</div>
+                            )}
+                          </div>
 
-                    <div className="flex items-center gap-2">
-                      {canManage && (
-                        <select
-                          className="border rounded px-2 py-1 text-sm"
-                          value={m.role}
-                          onChange={(e) => onChangeRole?.(m.id, e.target.value)}
-                        >
-                          <option value="owner">owner</option>
-                          <option value="admin">admin</option>
-                          <option value="pm">pm</option>
-                          <option value="engineer">engineer</option>
-                          <option value="qa">qa</option>
-                          <option value="legal">legal</option>
-                          <option value="member">member</option>
-                        </select>
-                      )}
-                      {canManage && m.role !== 'owner' && (
-                        <button className="px-2 py-1 border rounded text-xs"
-                                onClick={() => onRemoveMember?.(m.id)}>
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                          <div className="flex items-center gap-2 ml-4">
+                            {canManage ? (
+                              <select
+                                className="border rounded px-2 py-1 text-sm min-w-[100px]"
+                                value={m.role || 'member'}
+                                onChange={(e) => onChangeRole?.(memberId, e.target.value)}
+                              >
+                                {ROLE_OPTIONS.map(role => (
+                                  <option key={role} value={role}>{role}</option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span className="px-2 py-1 text-sm bg-gray-100 rounded">
+                                {m.role || 'member'}
+                              </span>
+                            )}
+                            
+                            {canManage && m.role !== 'owner' && (
+                              <button 
+                                className="px-2 py-1 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50"
+                                onClick={() => onRemoveMember?.(memberId)}
+                                title="Remove member"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </>
             )}
           </>
         )}

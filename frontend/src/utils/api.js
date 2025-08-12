@@ -17,25 +17,98 @@ function companyHeader(companyId) {
 
 // Hardened company members API helper
 export async function getMembers(companyId) {
-  const headers = {
-    ...(await authHeader(true)),
-    ...companyHeader(companyId)
-  };
-  const r = await fetch(`${BASE}/api/companies/${companyId}/members`, { headers });
-  if (!r.ok) throw new ApiError('Failed to fetch members', r.status, await r.json().catch(()=>({})));
-  return r.json();
+  try {
+    console.log('[API] Fetching members for company:', companyId);
+
+    const headers = {
+      ...(await authHeader(true)), // Force fresh token
+      ...companyHeader(companyId)
+    };
+
+    console.log('[API] Request headers:', headers);
+
+    const response = await fetch(`${BASE}/api/companies/${companyId}/members`, {
+      method: 'GET',
+      headers
+    });
+
+    console.log('[API] Response status:', response.status);
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('[API] Error response:', errorData);
+      throw new ApiError('Failed to fetch members', response.status, errorData);
+    }
+
+    const members = await response.json();
+    console.log('[API] Received members:', members);
+
+    return members;
+  } catch (error) {
+    console.error('[API] getMembers failed:', error);
+    throw error;
+  }
 }
 
+// Alternative direct route method if the above doesn't work
+export async function getCompanyMembersAlternative(companyId) {
+  try {
+    console.log('[API] Alternative fetch for company members:', companyId);
+
+    return await apiRequest(`/api/companies/${companyId}/members`, {
+      method: 'GET',
+      companyId, // adds X-Company-Id
+    });
+  } catch (error) {
+    console.error('[API] Alternative getCompanyMembers failed:', error);
+    throw error;
+  }
+}
 
 // Get invite code for a company
 export async function getInviteCode(companyId) {
-  const headers = {
-    ...(await authHeader(true)),
-    ...companyHeader(companyId)
-  };
-  const r = await fetch(`${BASE}/api/companies/${companyId}/invite-code`, { headers });
-  if (!r.ok) throw new ApiError('Failed to fetch invite code', r.status, await r.json().catch(()=>({})));
-  return r.json(); // { code }
+  try {
+    console.log('[API] Fetching invite code for company:', companyId);
+
+    const headers = {
+      ...(await authHeader(true)),
+      ...companyHeader(companyId)
+    };
+
+    const response = await fetch(`${BASE}/api/companies/${companyId}/invite-code`, {
+      method: 'GET',
+      headers
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('[API] Error getting invite code:', errorData);
+      throw new ApiError('Failed to fetch invite code', response.status, errorData);
+    }
+
+    const data = await response.json();
+    console.log('[API] Received invite code data:', data);
+
+    return data; // { invite_code: "..." }
+  } catch (error) {
+    console.error('[API] getInviteCode failed:', error);
+    throw error;
+  }
+}
+
+// Regenerate invite code with better error handling
+export async function regenerateInviteCode(companyId) {
+  try {
+    console.log('[API] Regenerating invite code for company:', companyId);
+
+    return await apiRequest(`/api/companies/${companyId}/invite-code`, {
+      method: 'POST',
+      companyId,
+    });
+  } catch (error) {
+    console.error('[API] regenerateInviteCode failed:', error);
+    throw error;
+  }
 }
 
 export class ApiError extends Error {
@@ -233,11 +306,18 @@ export async function getCompanyMembers(companyId) {
 }
 
 export async function updateMemberRole(companyId, userId, role) {
-  return apiRequest(`/api/companies/${companyId}/members/${userId}/role`, {
-    method: 'PATCH',
-    body: { role }, // pass plain object
-    headers: { 'X-Company-Id': companyId }
-  });
+  try {
+    console.log('[API] Updating member role:', { companyId, userId, role });
+
+    return await apiRequest(`/api/companies/${companyId}/members/${userId}/role`, {
+      method: 'PATCH',
+      body: { role },
+      companyId,
+    });
+  } catch (error) {
+    console.error('[API] updateMemberRole failed:', error);
+    throw error;
+  }
 }
 
 export async function transferOwnership(companyId, newOwnerUserId) {
@@ -249,8 +329,15 @@ export async function transferOwnership(companyId, newOwnerUserId) {
 }
 
 export async function removeMember(companyId, userId) {
-  return apiRequest(`/api/companies/${companyId}/members/${userId}`, {
-    method: 'DELETE',
-    headers: { 'X-Company-Id': companyId }
-  });
+  try {
+    console.log('[API] Removing member:', { companyId, userId });
+
+    return await apiRequest(`/api/companies/${companyId}/members/${userId}`, {
+      method: 'DELETE',
+      companyId,
+    });
+  } catch (error) {
+    console.error('[API] removeMember failed:', error);
+    throw error;
+  }
 }
