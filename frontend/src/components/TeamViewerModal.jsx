@@ -131,8 +131,8 @@ export default function TeamViewerModal({
                 ) : (
                   <ul className="divide-y">
                     {members.map(m => {
-                      const displayName = getMemberDisplayName(m);
-                      const memberId = m.id || m.user_id;
+                      const displayName = memberLabel(m);              // <- use the helper you defined above
+                      const memberId = m.user_id || m.id || m.user?.id; // safer id fallback
                       
                       return (
                         <li key={memberId} className="py-3 flex items-center justify-between">
