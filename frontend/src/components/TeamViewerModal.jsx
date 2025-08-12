@@ -57,26 +57,29 @@ export default function TeamViewerModal({
 
   function memberLabel(m) {
     const u = m?.user || {};
+    const me = auth.currentUser;
+
     const pick = (...vals) =>
       vals.find(v => typeof v === 'string' && v.trim() && !/^unknown/i.test(v));
 
-    const isMe =
-      String(m.user_id ?? m.id ?? u.id ?? '') === String(auth.currentUser?.uid ?? '');
+    // If this row is the OWNER and we’re logged in, always show our email/name
+    if (String(m.role).toLowerCase() === 'owner' && me) {
+      const mine = pick(me.displayName, me.email);
+      if (mine) return mine;
+    }
 
-    // Prefer display name → name → username → email
-    const base = pick(
+    // Normal fallbacks: display name → name/username → email (from either nesting)
+    const label = pick(
       m.display_name, m.displayName, m.name,
       u.display_name, u.displayName, u.name,
       m.username, u.username,
-      m.email, u.email
+      m.email, u.email,
+      // try common invite fields if your backend stored them
+      m.invited_email, m.pending_email
     );
 
-    if (base) return base;
-
-    // Final fallback for yourself
-    if (isMe) return pick(auth.currentUser?.displayName, auth.currentUser?.email) || 'You';
-
-    return 'Pending member';
+    // Last resort: show a short id so it’s not blank
+    return label || String(m.user_id || m.id || '').slice(0, 8) || 'Pending member';
   }
 
   return (
@@ -130,21 +133,21 @@ export default function TeamViewerModal({
                   <div className="text-sm text-gray-500 p-4 text-center">No team members found</div>
                 ) : (
                   <ul className="divide-y">
-                    {members.map(m => {
-                      const displayName = memberLabel(m);              // <- use the helper you defined above
-                      const memberId = m.user_id || m.id || m.user?.id; // safer id fallback
+                    {members.map(member => {
+                      // const displayName = memberLabel(m);              // <- use the helper you defined above
+                      // const memberId = m.user_id || m.id || m.user?.id; // safer id fallback
                       
                       return (
-                        <li key={memberId} className="py-3 flex items-center justify-between">
+                        <div key={member.user_id ?? member.id ?? member.user?.id} className="flex items-center justify-between">
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium text-gray-900 truncate">
-                              {displayName}
+                              {memberLabel(member)}
                             </div>
-                            {m.email && m.email.trim() && (
-                              <div className="text-xs text-gray-500 truncate mt-1">{m.email}</div>
+                            {member.email && member.email.trim() && (
+                              <div className="text-xs text-gray-500 truncate mt-1">{member.email}</div>
                             )}
-                            {m.username && m.username.trim() && m.username !== displayName && (
-                              <div className="text-xs text-gray-400 truncate">@{m.username}</div>
+                            {member.username && member.username.trim() && member.username !== memberLabel(member) && (
+                              <div className="text-xs text-gray-400 truncate">@{member.username}</div>
                             )}
                           </div>
 
@@ -152,8 +155,8 @@ export default function TeamViewerModal({
                             {canManage ? (
                               <select
                                 className="border rounded px-2 py-1 text-sm min-w-[100px]"
-                                value={m.role || 'member'}
-                                onChange={(e) => onChangeRole?.(memberId, e.target.value)}
+                                value={member.role || 'member'}
+                                onChange={(e) => onChangeRole?.(member.user_id ?? member.id ?? member.user?.id, e.target.value)}
                               >
                                 {ROLE_OPTIONS.map(role => (
                                   <option key={role} value={role}>{role}</option>
@@ -161,21 +164,21 @@ export default function TeamViewerModal({
                               </select>
                             ) : (
                               <span className="px-2 py-1 text-sm bg-gray-100 rounded">
-                                {m.role || 'member'}
+                                {member.role || 'member'}
                               </span>
                             )}
                             
-                            {canManage && m.role !== 'owner' && (
+                            {canManage && member.role !== 'owner' && (
                               <button 
                                 className="px-2 py-1 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50"
-                                onClick={() => onRemoveMember?.(memberId)}
+                                onClick={() => onRemoveMember?.(member.user_id ?? member.id ?? member.user?.id)}
                                 title="Remove member"
                               >
                                 Remove
                               </button>
                             )}
                           </div>
-                        </li>
+                        </div>
                       );
                     })}
                   </ul>
