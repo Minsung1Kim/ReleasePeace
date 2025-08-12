@@ -3,7 +3,8 @@
 // On Firebase auth, auto-creates/activates a DB user from token claims.
 
 const jwt = require('jsonwebtoken');
-const { User } = require('../models');
+const { User, sequelize } = require('../models');
+const { Op } = require('sequelize');
 
 let admin = null;
 function ensureFirebaseAdmin() {
@@ -72,9 +73,7 @@ async function getOrCreateUserFromFirebase(payload) {
   return user;
 }
 
-const authMiddleware = async (req, res, next) => {
-  // Allow CORS preflight requests to pass through without auth
-  if (req.method === 'OPTIONS') return next();
+async function authMiddleware(req, res, next) {
   try {
     const raw = req.header('Authorization') || '';
     const token = raw.startsWith('Bearer ') ? raw.slice(7) : null;
@@ -103,8 +102,8 @@ const authMiddleware = async (req, res, next) => {
     }
 
     return res.status(401).json({ error: 'Access denied', message: 'Invalid token' });
-  } catch (err) {
-    console.error('Auth middleware error:', err);
+  } catch (e) {
+    console.error('Auth middleware error:', e);
     return res.status(401).json({ error: 'Access denied', message: 'Invalid token' });
   }
 };
