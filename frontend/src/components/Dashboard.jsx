@@ -107,18 +107,22 @@ function ActivityBell({ authedFetch }) {
 }
 
 // ---------- Main Dashboard ----------
-export default function Dashboard({
-  user,
-  token,
-  getToken,
-  onLogout,
-  company: companyProp,
-  onSwitchCompany, // optional callback from parent
-}) {
+export default function Dashboard(props) {
+  // --- TDZ guard: ensure k exists before any usage ---
+  let k;
+  // Destructure props safely
+  const {
+    company: companyProp = null,
+    user = {},
+    token = null,
+    getToken = null,
+    onSwitchCompany = null,
+    onLogout = () => {}
+  } = props || {};
+
   // --- unified people modal state (Invite | Team) ---
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [peopleView, setPeopleView] = useState('invite'); // 'invite' | 'team'
-
   // core state
   const [activeCompany, setActiveCompany] = useState(null);
   const [apiStatus, setApiStatus] = useState('checking...');
@@ -148,6 +152,7 @@ export default function Dashboard({
   const inviteLoadInFlight = useRef(false);
 
   const loadInvite = useCallback(async () => {
+    const company = activeCompany || companyProp || null;
     if (!company?.id || inviteLoadInFlight.current) return;
     inviteLoadInFlight.current = true;
     try {
@@ -162,7 +167,7 @@ export default function Dashboard({
     } finally {
       inviteLoadInFlight.current = false;
     }
-  }, [company?.id]);
+  }, [activeCompany, companyProp]);
 
   const copyInvite = useCallback(async () => {
     if (!inviteCode) return;
@@ -170,10 +175,11 @@ export default function Dashboard({
   }, [inviteCode]);
 
   const onRegenerateInvite = useCallback(async () => {
+    const company = activeCompany || companyProp || null;
     if (!company?.id) return;
     const r = await companies.regenerateInvite(company.id);
     setInviteCode((r?.invite_code || '').trim());
-  }, [company?.id]);
+  }, [activeCompany, companyProp]);
 
   // --- derived values ---
   const company = activeCompany || companyProp || null;
@@ -183,7 +189,7 @@ export default function Dashboard({
   const canToggle = ['owner','admin','pm','engineer'].includes(effectiveRole);
   const canManage = ['owner','admin'].includes(effectiveRole);
   const environments = ['development', 'staging', 'production'];
-  const companyId = company?.id || localStorage.getItem('rp_company_id') || undefined;
+  const companyId = company?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('rp_company_id') : undefined) || undefined;
 
   // --- helpers ---
   const companyPathParam = () => {
@@ -205,7 +211,7 @@ export default function Dashboard({
   }, []);
 
   const authedFetch = useCallback(async (path, opts = {}) => {
-    const id = company?.id || localStorage.getItem('rp_company_id') || undefined;
+    const id = company?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('rp_company_id') : undefined) || undefined;
     const t = (typeof getToken === 'function')
       ? await getToken(true)
       : await getFreshToken();
@@ -224,7 +230,7 @@ export default function Dashboard({
     if (resp.id) return resp;
     if (resp.company) return resp.company;
     if (Array.isArray(resp.companies) && resp.companies.length) {
-      const saved = localStorage.getItem('rp_company_id');
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('rp_company_id') : null;
       return resp.companies.find(c => c.id === saved) || resp.companies[0];
     }
     if (resp.companyId) return { id: resp.companyId, role: resp.role };
@@ -233,7 +239,7 @@ export default function Dashboard({
 
   const loadActiveCompany = useCallback(async () => {
     try {
-      const mine = await authedFetch('/api/companies/mine'); // could be {company}, {companies}, or company
+      const mine = await authedFetch('/api/companies/mine');
       const normalized = mine?.company ? {...mine.company, role: mine.role} : mine;
       if (!normalized?.id) return;
 
@@ -242,18 +248,19 @@ export default function Dashboard({
 
       setActiveCompany(c);
       if (c?.id) {
-        localStorage.setItem('releasepeace_company', JSON.stringify(c));
-        localStorage.setItem('rp_company_id', c.id);
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('releasepeace_company', JSON.stringify(c));
+          localStorage.setItem('rp_company_id', c.id);
+        }
       }
     } catch (e) {
       console.warn('loadActiveCompany failed', e);
     }
   }, [authedFetch]);
-
   // --- boot + token refresh + role sync ---
   useEffect(() => {
     setActiveCompany(companyProp || null);
-    if (companyProp?.id) localStorage.setItem('rp_company_id', companyProp.id);
+    if (companyProp?.id && typeof localStorage !== 'undefined') localStorage.setItem('rp_company_id', companyProp.id);
   }, [companyProp?.id]);
 
   useEffect(() => { loadActiveCompany(); }, [loadActiveCompany]);
@@ -277,7 +284,9 @@ export default function Dashboard({
         const list = resp?.companies || (resp ? [resp] : []);
         const latest = list.find(c => c.id === company?.id);
         if (latest && latest.role && latest.role !== company?.role) {
-          localStorage.setItem('releasepeace_company', JSON.stringify(latest));
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('releasepeace_company', JSON.stringify(latest));
+          }
           window.location.reload();
         }
       } catch {}
@@ -294,7 +303,7 @@ export default function Dashboard({
       .catch(() => setApiStatus('❌ Connection failed'));
     fetchFlags();
     loadRecent();
-    if (company?.id) localStorage.setItem('rp_company_id', company.id);
+    if (company?.id && typeof localStorage !== 'undefined') localStorage.setItem('rp_company_id', company.id);
   }, [company, token]); // eslint-disable-line
 
   // --- loaders ---
@@ -369,6 +378,8 @@ export default function Dashboard({
 
   // --- team & invite ---
   const refreshMembers = useCallback(async () => {
+    const company = activeCompany || companyProp || null;
+    if (!company?.id) return;
     setTeamLoading(true);
     setTeamError('');
     try {
@@ -386,16 +397,18 @@ export default function Dashboard({
     } finally {
       setTeamLoading(false);
     }
-  }, [company?.id]);
+  }, [activeCompany, companyProp]);
 
   const openInvite = async () => {
+    const company = activeCompany || companyProp || null;
     if (!company?.id) return alert('Select or create a company first.');
-    await loadInvite();                 // guarded, runs once
+    await loadInvite();
     setPeopleView('invite');
     setPeopleOpen(true);
   };
 
   const openTeam = async () => {
+    const company = activeCompany || companyProp || null;
     if (!company?.id) return alert('Select or create a company first.');
     await refreshMembers();
     setPeopleView('team');
@@ -403,6 +416,7 @@ export default function Dashboard({
   };
 
   const handleRoleChange = async (userId, newRole) => {
+    const company = activeCompany || companyProp || null;
     try {
       await api.updateMemberRole(company.id, userId, newRole);
       await refreshMembers();
@@ -412,6 +426,7 @@ export default function Dashboard({
   };
 
   const handleRemoveMember = async (userId) => {
+    const company = activeCompany || companyProp || null;
     if (!window.confirm('Remove this member from the company?')) return;
     try {
       await api.removeMember(company.id, userId);
@@ -420,7 +435,6 @@ export default function Dashboard({
       alert(e.message || 'Failed to remove member');
     }
   };
-
   // --- flags actions ---
   const createFlag = async (flagData) => {
     try {
@@ -732,8 +746,8 @@ export default function Dashboard({
                           </div>
                         )}
                         <div className="text-xs text-gray-500">
-                          Created by {flag.creator?.display_name || flag.creator?.username || 'Unknown'} •
-                          {' '}{envStats.enabled}/{envStats.total} environments enabled
+                          Created by {flag.creator?.display_name || flag.creator?.username || 'Unknown'} •{' '}
+                          {envStats.enabled}/{envStats.total} environments enabled
                         </div>
 
                         {/* Approval status helper */}
@@ -842,16 +856,25 @@ export default function Dashboard({
           onRemoveMember={handleRemoveMember}
         />
       )}
-
       {/* Approvals panel */}
       {approvalsOpen && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={() => setApprovalsOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-4" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+          onClick={() => setApprovalsOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-4"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Pending Approvals</h3>
               <div className="flex gap-2">
-                <button className="px-3 py-1 border rounded" onClick={loadPendingApprovals}>Refresh</button>
-                <button className="px-3 py-1 border rounded" onClick={() => setApprovalsOpen(false)}>Close</button>
+                <button className="px-3 py-1 border rounded" onClick={loadPendingApprovals}>
+                  Refresh
+                </button>
+                <button className="px-3 py-1 border rounded" onClick={() => setApprovalsOpen(false)}>
+                  Close
+                </button>
               </div>
             </div>
             {pendingApprovals.length === 0 ? (
@@ -862,17 +885,36 @@ export default function Dashboard({
                   <li key={p.id} className="py-3 px-1 flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate">
-                        {p.flag?.name} <span className="text-xs ml-2 opacity-70">({p.approver_role})</span>
+                        {p.flag?.name}{' '}
+                        <span className="text-xs ml-2 opacity-70">({p.approver_role})</span>
                       </div>
                       <div className="text-xs text-gray-500">
-                        Requested by {p.requester?.display_name || p.requester?.username || p.requester?.email} • {new Date(p.created_at).toLocaleString()}
+                        Requested by{' '}
+                        {p.requester?.display_name || p.requester?.username || p.requester?.email} •{' '}
+                        {new Date(p.created_at).toLocaleString()}
                       </div>
-                      {p.comments && <div className="text-xs mt-1 opacity-90">“{p.comments}”</div>}
-                      {p.flag?.requires_approval && <span className="rp-badge mt-1 inline-block text-[10px]">requires approval</span>}
+                      {p.comments && (
+                        <div className="text-xs mt-1 opacity-90">“{p.comments}”</div>
+                      )}
+                      {p.flag?.requires_approval && (
+                        <span className="rp-badge mt-1 inline-block text-[10px]">
+                          requires approval
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <button className="px-3 py-1 border rounded hover:bg-gray-100" onClick={() => decideApproval(p.flag.id, p.id, 'approved')}>Approve</button>
-                      <button className="px-3 py-1 border rounded hover:bg-gray-100" onClick={() => decideApproval(p.flag.id, p.id, 'rejected')}>Reject</button>
+                      <button
+                        className="px-3 py-1 border rounded hover:bg-gray-100"
+                        onClick={() => decideApproval(p.flag.id, p.id, 'approved')}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className="px-3 py-1 border rounded hover:bg-gray-100"
+                        onClick={() => decideApproval(p.flag.id, p.id, 'rejected')}
+                      >
+                        Reject
+                      </button>
                     </div>
                   </li>
                 ))}
@@ -885,10 +927,15 @@ export default function Dashboard({
       {/* Audit drawer */}
       {auditOpen && (
         <div className="fixed inset-0 bg-black/40 z-50" onClick={() => setAuditOpen(false)}>
-          <div className="absolute right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl p-4" onClick={e => e.stopPropagation()}>
+          <div
+            className="absolute right-0 top-0 bottom-0 w-full max-w-lg bg-white shadow-2xl p-4"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">History — {auditForFlag?.name}</h3>
-              <button className="px-3 py-1 border rounded" onClick={() => setAuditOpen(false)}>Close</button>
+              <button className="px-3 py-1 border rounded" onClick={() => setAuditOpen(false)}>
+                Close
+              </button>
             </div>
             {auditLoading ? (
               <div className="p-6 text-sm text-gray-500">Loading…</div>
@@ -900,10 +947,13 @@ export default function Dashboard({
                   <li key={r.id} className="py-3">
                     <div className="text-sm">
                       <span className="font-medium">{r.action}</span>
-                      {r.environment ? <span className="ml-2 text-xs opacity-70">[{r.environment}]</span> : null}
+                      {r.environment ? (
+                        <span className="ml-2 text-xs opacity-70">[{r.environment}]</span>
+                      ) : null}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {new Date(r.created_at).toLocaleString()} • {r.user?.display_name || r.user?.username || r.user?.email}
+                      {new Date(r.created_at).toLocaleString()} •{' '}
+                      {r.user?.display_name || r.user?.username || r.user?.email}
                     </div>
                     {r.reason && <div className="text-xs mt-1">Reason: {r.reason}</div>}
                   </li>
@@ -919,7 +969,7 @@ export default function Dashboard({
 
 // ---------- Create Flag Modal ----------
 function CreateFlagModal({ onClose, onCreate }) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = React.useState({
     name: '',
     description: '',
     flag_type: 'rollout',
@@ -927,7 +977,7 @@ function CreateFlagModal({ onClose, onCreate }) {
     tags: '',
     requires_approval: false
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = React.useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -935,7 +985,10 @@ function CreateFlagModal({ onClose, onCreate }) {
     try {
       const toSend = {
         ...formData,
-        tags: formData.tags.split(',').map(t => t.trim()).filter(Boolean)
+        tags: formData.tags
+          .split(',')
+          .map(t => t.trim())
+          .filter(Boolean)
       };
       await onCreate(toSend);
       onClose();
@@ -948,8 +1001,14 @@ function CreateFlagModal({ onClose, onCreate }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg max-w-md w-full p-6" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-lg max-w-md w-full p-6"
+        onClick={e => e.stopPropagation()}
+      >
         <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Feature Flag</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -1006,7 +1065,9 @@ function CreateFlagModal({ onClose, onCreate }) {
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tags (comma-separated)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tags (comma-separated)
+            </label>
             <input
               type="text"
               value={formData.tags}
@@ -1021,7 +1082,9 @@ function CreateFlagModal({ onClose, onCreate }) {
               id="requires_approval"
               type="checkbox"
               checked={formData.requires_approval}
-              onChange={(e) => setFormData({ ...formData, requires_approval: e.target.checked })}
+              onChange={(e) =>
+                setFormData({ ...formData, requires_approval: e.target.checked })
+              }
               className="h-4 w-4 text-blue-600 border-gray-300 rounded"
               disabled={loading}
             />
