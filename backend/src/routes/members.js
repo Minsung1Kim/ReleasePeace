@@ -1,50 +1,41 @@
 // backend/src/routes/members.js
 const express = require('express');
 const router = express.Router();
-
 const { authMiddleware: requireAuth } = require('../middleware/auth');
-const { User, Company, UserCompany } = require('../models');
+const { sequelize, User, Company, UserCompany } = require('../models');
 
 // GET /api/companies/:companyId/members
 router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
   try {
     const { companyId } = req.params;
 
-    const company = await Company.findByPk(companyId);
-    if (!company) return res.status(404).json({ error: 'Company not found' });
+    // table names from models (works with any schema/casing)
+    const T_USERS = sequelize.getQueryInterface().quoteTable(User.getTableName());
+    const T_UC    = sequelize.getQueryInterface().quoteTable(UserCompany.getTableName());
 
-    const rows = await UserCompany.findAll({
-      where: { company_id: companyId, status: 'active' },
-      include: [
-        {
-          model: User,
-          // don't force an alias; accept whatever association was defined
-          required: false,
-          attributes: ['id', 'username', 'display_name', 'email']
-        }
-      ],
-      // order by either alias shape
-      order: [
-        [User, 'display_name', 'ASC']
-      ]
-    });
+    const rows = await sequelize.query(
+      `
+      SELECT
+        uc.user_id            AS id,
+        uc.user_id,
+        uc.company_id,
+        uc.role,
+        COALESCE(NULLIF(TRIM(u.display_name), ''), u.username, u.email, 'Unknown') AS display_name,
+        u.username,
+        u.email
+      FROM ${T_UC} AS uc
+      LEFT JOIN ${T_USERS} AS u
+        ON u.id = uc.user_id
+      WHERE uc.company_id = :companyId
+        AND uc.status = 'active'
+      ORDER BY display_name ASC
+      `,
+      { replacements: { companyId }, type: sequelize.QueryTypes.SELECT }
+    );
 
-    const members = rows.map(r => {
-      const u = r.user || r.User || null; // handle alias differences
-      return {
-        id: u?.id || r.user_id, // user id
-        user_id: r.user_id,
-        company_id: r.company_id,
-        role: r.role,
-        display_name: (u?.display_name || u?.username || u?.email || 'Unknown'),
-        username: u?.username || null,
-        email: u?.email || null,
-      };
-    });
-
-    return res.json(members);
+    return res.json(rows);
   } catch (err) {
-    console.error('GET members error:', err);
+    console.error('GET /members error:', err);
     return res.status(500).json({ error: 'Failed to fetch members' });
   }
 });
@@ -55,20 +46,15 @@ router.patch('/companies/:companyId/members/:userId/role', requireAuth, async (r
     const { companyId, userId } = req.params;
     const { role } = req.body;
 
-    // only owner/admin can change roles
-    const actor = await UserCompany.findOne({ where: { company_id: companyId, user_id: req.user.id, status: 'active' }});
-    if (!actor || !['owner','admin'].includes(actor.role)) {
-      return res.status(403).json({ error: 'Insufficient role' });
-    }
-
-    const member = await UserCompany.findOne({ where: { company_id: companyId, user_id: userId, status: 'active' }});
-    if (!member) return res.status(404).json({ error: 'Member not found' });
-
-    await member.update({ role });
-    return res.json({ ok: true });
+    const [updated] = await UserCompany.update(
+      { role },
+      { where: { company_id: companyId, user_id: userId, status: 'active' } }
+    );
+    if (!updated) return res.status(404).json({ error: 'Member not found' });
+    res.json({ ok: true });
   } catch (err) {
     console.error('PATCH member role error:', err);
-    return res.status(500).json({ error: 'Failed to update role' });
+    res.status(500).json({ error: 'Failed to update role' });
   }
 });
 
@@ -76,21 +62,15 @@ router.patch('/companies/:companyId/members/:userId/role', requireAuth, async (r
 router.delete('/companies/:companyId/members/:userId', requireAuth, async (req, res) => {
   try {
     const { companyId, userId } = req.params;
-
-    const actor = await UserCompany.findOne({ where: { company_id: companyId, user_id: req.user.id, status: 'active' }});
-    if (!actor || !['owner','admin'].includes(actor.role)) {
-      return res.status(403).json({ error: 'Insufficient role' });
-    }
-
-    const member = await UserCompany.findOne({ where: { company_id: companyId, user_id: userId, status: 'active' }});
-    if (!member) return res.status(404).json({ error: 'Member not found' });
-
-    // soft-remove to keep audit trails
-    await member.update({ status: 'removed' });
-    return res.status(204).end();
+    const [updated] = await UserCompany.update(
+      { status: 'removed' },
+      { where: { company_id: companyId, user_id: userId, status: 'active' } }
+    );
+    if (!updated) return res.status(404).json({ error: 'Member not found' });
+    res.status(204).end();
   } catch (err) {
     console.error('DELETE member error:', err);
-    return res.status(500).json({ error: 'Failed to remove member' });
+    res.status(500).json({ error: 'Failed to remove member' });
   }
 });
 
