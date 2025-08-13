@@ -134,14 +134,11 @@ export default function TeamViewerModal({
                 ) : (
                   <ul className="divide-y">
                     {members.map(member => {
-                      // const displayName = memberLabel(m);              // <- use the helper you defined above
-                      // const memberId = m.user_id || m.id || m.user?.id; // safer id fallback
-                      
                       return (
                         <div key={member.user_id ?? member.id ?? member.user?.id} className="flex items-center justify-between">
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium text-gray-900 truncate">
-                              {memberLabel(member)}
+                              {member.email || member.name || (member.user_id ? String(member.user_id).slice(0, 8) : 'pending')}
                             </div>
                             {member.email && member.email.trim() && (
                               <div className="text-xs text-gray-500 truncate mt-1">{member.email}</div>

@@ -5,6 +5,7 @@
 const jwt = require('jsonwebtoken');
 const { User, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const db = require('../utils/db'); // Knex
 
 let admin = null;
 function ensureFirebaseAdmin() {
@@ -97,6 +98,17 @@ async function authMiddleware(req, res, next) {
     const fb = await verifyFirebaseToken(token);
     if (fb?.uid) {
       const user = await getOrCreateUserFromFirebase(fb);
+
+      // Persist email so JOINs have data (do NOT use Firebase UID as users.id)
+      try {
+        await db('users')
+          .insert({ id: user.id, email: user.email || null })
+          .onConflict('id')
+          .merge({ email: user.email || null });
+      } catch (e) {
+        console.warn('users upsert (email) failed:', e?.message);
+      }
+
       req.user = user;
       return next();
     }

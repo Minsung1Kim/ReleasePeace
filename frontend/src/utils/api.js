@@ -300,9 +300,9 @@ export const sdk = {
 
 // --- Company membership / roles (uses apiRequest + config.apiUrl) ---
 export async function getCompanyMembers(companyId) {
-  return apiRequest(`/api/companies/${companyId}/members`, {
-    headers: { 'X-Company-Id': companyId }
-  });
+  const res = await apiRequest(`/companies/${companyId}/members`);
+  // Pass through all fields (email, username, display_name, etc.)
+  return Array.isArray(res) ? res : (res?.members ?? []);
 }
 
 export async function updateMemberRole(companyId, userId, role) {

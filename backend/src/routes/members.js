@@ -9,52 +9,20 @@ router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
   try {
     const { companyId } = req.params;
 
-    // 1) memberships for this company
-    const memberships = await db('company_members')
-      .select('user_id', 'company_id', 'role')
-      .where({ company_id: companyId, status: 'active' });
+    // Join company_members -> users to get emails
+    const rows = await db('company_members as m')
+      .leftJoin('users as u', 'u.id', 'm.user_id')
+      .select(
+        'm.user_id as id',
+        'm.role',
+        'u.email as email',   // include email
+        'u.name as name'      // optional, if you store names
+      )
+      .where('m.company_id', companyId);
 
-    if (!memberships.length) {
-      res.set('Cache-Control', 'no-store');
-      return res.json([]);
-    }
-
-    // 2) batch fetch users
-    const ids = Array.from(new Set(memberships.map(m => m.user_id)));
-    const users = await db('users')
-      .select('id', 'display_name', 'name', 'username', 'email')
-      .whereIn('id', ids);
-
-    const byId = Object.fromEntries(users.map(u => [String(u.id), u]));
-    const pick = (...vals) => vals.find(v => typeof v === 'string' && v.trim());
-
-    // 3) normalize response: always provide a display_name (falls back to email)
-    const out = memberships.map(m => {
-      const u = byId[String(m.user_id)] || {};
-      const display =
-        pick(u.display_name, u.name, u.username, u.email) ||
-        (String(m.user_id) === String(req.user?.id)
-          ? pick(req.user?.display_name, req.user?.name, req.user?.email)
-          : null) ||
-        'Unknown';
-
-      return {
-        user_id: m.user_id,
-        company_id: m.company_id,
-        role: m.role,
-        display_name: display,
-        email: u.email || (String(m.user_id) === String(req.user?.id) ? (req.user?.email || null) : null),
-      };
-    });
-
-    // fresh each time to avoid 304s
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
-
-    return res.json(out);
-  } catch (e) {
-    console.error('GET /companies/:companyId/members error:', e);
+    return res.json(rows);
+  } catch (err) {
+    console.error('GET /companies/:companyId/members error:', err);
     return res.status(500).json({ error: 'Failed to fetch members' });
   }
 });
