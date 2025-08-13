@@ -1,12 +1,14 @@
 // frontend/src/components/CompanySelector.jsx - NEW FILE
 import React, { useState } from 'react'
 import { config } from '../config'
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 
 const CompanySelector = ({ user, companies, token, onCompanySelect, onLogout, onCompaniesUpdate }) => {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [showJoinForm, setShowJoinForm] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [userEmail, setUserEmail] = React.useState('');
 
   const [createForm, setCreateForm] = useState({
     name: '',
@@ -97,13 +99,23 @@ const CompanySelector = ({ user, companies, token, onCompanySelect, onLogout, on
     }
   }
 
+  React.useEffect(() => {
+    const auth = getAuth();
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUserEmail(u?.email || '');
+    });
+    return unsub;
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 flex items-center justify-center px-4">
       <div className="max-w-2xl w-full">
         <div className="bg-white rounded-lg shadow-xl p-8">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Select Company</h1>
-            <p className="text-gray-600">Welcome, {user?.display_name || user?.username}!</p>
+            <p className="text-gray-300 text-center mt-2">
+              Welcome, {userEmail || 'guest'}!
+            </p>
           </div>
 
           {error && (
