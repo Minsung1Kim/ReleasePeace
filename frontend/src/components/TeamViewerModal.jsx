@@ -135,11 +135,13 @@ export default function TeamViewerModal({
                   <ul className="divide-y">
                     {members.map(member => {
                       return (
-                        <div key={member.user_id ?? member.id ?? member.user?.id} className="flex items-center justify-between">
+                        <div key={member.user_id} className="flex items-center justify-between">
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-gray-900 truncate">
-                              {member.email || member.name || (member.user_id ? String(member.user_id).slice(0, 8) : 'pending')}
-                            </div>
+                            {/* replace the display cell with email-first fallback */}
+                            <span className="truncate">
+                              {member.email || member.name || (member.user_id ? String(member.user_id).slice(0, 8) : (member.id ? String(member.id).slice(0, 8) : 'pending member'))}
+                            </span>
+
                             {member.email && member.email.trim() && (
                               <div className="text-xs text-gray-500 truncate mt-1">{member.email}</div>
                             )}

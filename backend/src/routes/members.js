@@ -9,18 +9,17 @@ router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
   try {
     const { companyId } = req.params;
 
-    // Join company_members -> users to get emails
     const rows = await db('company_members as m')
       .leftJoin('users as u', 'u.id', 'm.user_id')
       .select(
         'm.user_id as id',
         'm.role',
-        'u.email as email',   // include email
-        'u.name as name'      // optional, if you store names
+        'u.email as email',
+        'u.name as name'
       )
       .where('m.company_id', companyId);
 
-    return res.json(rows);
+    return res.json({ members: rows });
   } catch (err) {
     console.error('GET /companies/:companyId/members error:', err);
     return res.status(500).json({ error: 'Failed to fetch members' });

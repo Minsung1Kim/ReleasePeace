@@ -97,18 +97,16 @@ async function authMiddleware(req, res, next) {
     // 2) Firebase ID token path
     const fb = await verifyFirebaseToken(token);
     if (fb?.uid) {
+      const uid = fb.uid;
+      const email = fb.email || null;
+
+      // Persist email so JOINs have data
+      await db('users')
+        .insert({ id: uid, email })
+        .onConflict('id')
+        .merge({ email });
+
       const user = await getOrCreateUserFromFirebase(fb);
-
-      // Persist email so JOINs have data (do NOT use Firebase UID as users.id)
-      try {
-        await db('users')
-          .insert({ id: user.id, email: user.email || null })
-          .onConflict('id')
-          .merge({ email: user.email || null });
-      } catch (e) {
-        console.warn('users upsert (email) failed:', e?.message);
-      }
-
       req.user = user;
       return next();
     }
