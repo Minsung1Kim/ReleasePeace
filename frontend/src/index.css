@@ -10,6 +10,7 @@
   letter-spacing: 0.05em;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
+
 input[type="text"],
 input[type="email"],
 input[type="password"],
@@ -27,7 +28,7 @@ textarea::placeholder { color: var(--rp-muted) !important; }
 @tailwind components;
 @tailwind utilities;
 
-/* ===== ReleasePeace theme ===== */
+/* Theme */
 :root{
   --rp-primary: #F9D142;
   --rp-bg: #292826;
@@ -48,15 +49,17 @@ body{
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Reusable bits */
+/* Reusable */
 .rp-card{
   background: var(--rp-card-bg);
   border: 1px solid var(--rp-border);
   border-radius: .75rem;
-  min-height: 100px;
+  /* prevent clipping + keep content readable */
+  min-height: 112px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  overflow: visible;
 }
 .rp-btn-primary{ background: var(--rp-primary); color:#111; border-radius:.5rem; transition:opacity .15s ease; }
 .rp-btn-primary:hover{ opacity:.9; }
@@ -73,12 +76,14 @@ body{
 .border-gray-200, .border-gray-300 { border-color: var(--rp-border) !important; }
 .divide-gray-200 > :not([hidden]) ~ :not([hidden]){ border-color: var(--rp-border) !important; }
 
-/* Brand accents */
 .bg-blue-600, .hover\:bg-blue-700:hover { background-color: var(--rp-primary) !important; }
 .text-blue-600 { color: var(--rp-primary) !important; }
-/* Fix: show numbers without yellow blocks */
-.text-green-600 { color: var(--rp-primary) !important; }
-.text-orange-600 { color: var(--rp-primary) !important; }
-.text-purple-600 { color: var(--rp-primary) !important; }
-/* Keep only bg override for .bg-green-500 (not text) */
+
+/* Stat numbers: visible colors (no backgrounds) */
+.text-blue-600   { color: #3b82f6 !important; }
+.text-green-600  { color: #16a34a !important; }
+.text-orange-600 { color: #ea580c !important; }
+.text-purple-600 { color: #9333ea !important; }
+
+/* Only keep bg override for chips, not text */
 .bg-green-500 { background-color: var(--rp-primary) !important; color:#111 !important; }
