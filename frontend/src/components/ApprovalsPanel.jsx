@@ -12,12 +12,15 @@ export default function ApprovalsPanel({ onClose, role = 'QA' }) {
     setLoading(true);
     setErr('');
     try {
-      const ts = Date.now(); // cache buster so we don't get 304 with empty body
+      const ts = Date.now();
       const data = await apiRequest(
         `approvals/recent?status=pending&t=${ts}`,
         { headers: companyId ? { 'X-Company-Id': companyId, 'Cache-Control': 'no-cache' } : {} }
       );
-      const list = Array.isArray(data) ? data : (data?.approvals || []);
+      // accept any of the server shapes
+      const list = Array.isArray(data)
+        ? data
+        : (data?.pending || data?.approvals || data?.items || data?.data || []);
       setItems(list);
     } catch (e) {
       setErr(e?.message || 'Failed to load approvals');
@@ -27,7 +30,7 @@ export default function ApprovalsPanel({ onClose, role = 'QA' }) {
     }
   }
 
-  useEffect(() => { load(); }, []); // load on open
+  useEffect(() => { load(); }, []);
 
   async function decide(id, decision) {
     try {

@@ -297,6 +297,7 @@ app.get('/api/users', (req, res) => {
 // ---------- ROUTERS (mount once) ----------
 app.use('/api/flags', require('./routes/flags'));
 app.use('/api/companies', require('./routes/companies'));
+app.use('/api', require('./routes/approvals'));
 
 // ---------- MOCKS (only if explicitly enabled) ----------
 if (process.env.MOCK_API === '1') {
