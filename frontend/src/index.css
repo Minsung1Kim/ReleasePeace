@@ -10,32 +10,29 @@
   letter-spacing: 0.05em;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-/* Ensure form text is visible in dark mode */
 input[type="text"],
 input[type="email"],
 input[type="password"],
 input[type="number"],
 textarea,
 select {
-  color: var(--rp-fg) !important; /* readable text color */
-  background-color: var(--rp-card-bg) !important; /* match cards */
+  color: var(--rp-fg) !important;
+  background-color: var(--rp-card-bg) !important;
   border: 1px solid var(--rp-border) !important;
 }
-
 input::placeholder,
-textarea::placeholder {
-  color: var(--rp-muted) !important; /* lighter placeholder */
-}
+textarea::placeholder { color: var(--rp-muted) !important; }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ===== ReleasePeace theme (professional dark) ===== */
+/* ===== ReleasePeace theme ===== */
 :root{
-  --rp-primary: #F9D142;              /* accent yellow */
-  --rp-bg: #292826;                   /* page background */
-  --rp-card-bg: #1f1e1c;              /* cards/surfaces */
-  --rp-fg: #EAE7DF;                   /* **main text** (neutral) */
+  --rp-primary: #F9D142;
+  --rp-bg: #292826;
+  --rp-card-bg: #1f1e1c;
+  --rp-fg: #EAE7DF;
   --rp-muted: rgba(234, 231, 223, .75);
   --rp-border: rgba(249, 209, 66, .22);
   --rp-accent: rgba(249, 209, 66, .08);
@@ -45,7 +42,7 @@ html, body, #root { height: 100%; }
 body{
   margin: 0;
   background: var(--rp-bg);
-  color: var(--rp-fg);                /* neutral by default */
+  color: var(--rp-fg);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -56,47 +53,32 @@ body{
   background: var(--rp-card-bg);
   border: 1px solid var(--rp-border);
   border-radius: .75rem;
-  /* ✅ Prevent clipped content in stat cards */
   min-height: 100px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
-.rp-btn-primary{
-  background: var(--rp-primary);
-  color:#111;
-  border-radius: .5rem;
-  transition: opacity .15s ease;
-}
+.rp-btn-primary{ background: var(--rp-primary); color:#111; border-radius:.5rem; transition:opacity .15s ease; }
 .rp-btn-primary:hover{ opacity:.9; }
-.rp-input{
-  background: var(--rp-card-bg);
-  color: var(--rp-fg);
-  border: 1px solid var(--rp-border);
-  border-radius: .375rem;
-  padding: .5rem .75rem;
-}
-.rp-badge{
-  background: var(--rp-accent);
-  color: var(--rp-fg);
-  border: 1px solid var(--rp-border);
-  border-radius: 9999px;
-  padding: .125rem .5rem; font-size: .75rem;
-}
+.rp-input{ background:var(--rp-card-bg); color:var(--rp-fg); border:1px solid var(--rp-border); border-radius:.375rem; padding:.5rem .75rem; }
+.rp-badge{ background:var(--rp-accent); color:var(--rp-fg); border:1px solid var(--rp-border); border-radius:9999px; padding:.125rem .5rem; font-size:.75rem; }
 .rp-link{ color: var(--rp-primary); }
 .rp-link:hover{ text-decoration: underline; }
 .rp-heading{ color: var(--rp-primary); }
 
+/* Tailwind remaps */
 .bg-white, .bg-gray-50, .bg-gray-100 { background: var(--rp-card-bg) !important; }
 .text-gray-900, .text-gray-800 { color: var(--rp-fg) !important; }
 .text-gray-700, .text-gray-600, .text-gray-500 { color: var(--rp-muted) !important; }
 .border-gray-200, .border-gray-300 { border-color: var(--rp-border) !important; }
 .divide-gray-200 > :not([hidden]) ~ :not([hidden]){ border-color: var(--rp-border) !important; }
 
-.bg-blue-600, .hover\:bg-blue-700:hover{ background-color: var(--rp-primary) !important; }
-.text-blue-600{ color: var(--rp-primary) !important; }
-.focus\:ring-blue-500:focus{ --tw-ring-color: var(--rp-primary) !important; }
-
-.bg-green-500, .text-green-600{
-  background-color: var(--rp-primary) !important; color:#111 !important;
-}
+/* Brand accents */
+.bg-blue-600, .hover\:bg-blue-700:hover { background-color: var(--rp-primary) !important; }
+.text-blue-600 { color: var(--rp-primary) !important; }
+/* Fix: show numbers without yellow blocks */
+.text-green-600 { color: var(--rp-primary) !important; }
+.text-orange-600 { color: var(--rp-primary) !important; }
+.text-purple-600 { color: var(--rp-primary) !important; }
+/* Keep only bg override for .bg-green-500 (not text) */
+.bg-green-500 { background-color: var(--rp-primary) !important; color:#111 !important; }
