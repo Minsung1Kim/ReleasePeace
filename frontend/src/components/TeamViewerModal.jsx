@@ -8,20 +8,12 @@ export default function TeamViewerModal({
   onClose,
   companyId,
   view = 'invite', // 'invite' | 'team'
-
-  // roster
   members = [],
   loading = false,
   error = "",
-
-  // permissions
   canManage = false,
-
-  // role / membership mutations
   onChangeRole,         // (userId, newRole) => Promise<void>
   onRemoveMember,       // (userId) => Promise<void>
-
-  // invite
   inviteCode = "",
   onLoadInvite,         // () => Promise<void>
   onRegenerateInvite,   // () => Promise<void>
@@ -30,13 +22,7 @@ export default function TeamViewerModal({
   const overlayRef = useRef(null);
   const auth = getAuth();
 
-  // Load invite code once when the modal opens
-  useEffect(() => {
-    if (!open) return;
-    onLoadInvite?.();
-  }, [open]);
-
-  // Close on ESC
+  useEffect(() => { if (open) onLoadInvite?.(); }, [open]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === "Escape" && onClose?.();
@@ -55,32 +41,33 @@ export default function TeamViewerModal({
     if (e.target === overlayRef.current) onClose?.();
   };
 
+  const pick = (...vals) =>
+    vals.find(v => typeof v === 'string' && v.trim() && !/^unknown/i.test(v));
+
   function memberLabel(m) {
     const u = m?.user || {};
     const me = auth.currentUser;
 
-    const pick = (...vals) =>
-      vals.find(v => typeof v === 'string' && v.trim() && !/^unknown/i.test(v));
-
-    // If this row is the OWNER and we’re logged in, always show our email/name
     if (String(m.role).toLowerCase() === 'owner' && me) {
       const mine = pick(me.displayName, me.email);
       if (mine) return mine;
     }
 
-    // Normal fallbacks: display name → name/username → email (from either nesting)
-    const label = pick(
-      m.display_name, m.displayName, m.name,
-      u.display_name, u.displayName, u.name,
-      m.username, u.username,
-      m.email, u.email,
-      // try common invite fields if your backend stored them
-      m.invited_email, m.pending_email
+    return (
+      pick(
+        m.display_name, m.displayName, m.name,
+        u.display_name, u.displayName, u.name,
+        m.username, u.username,
+        m.email, u.email,
+        m.invited_email, m.pending_email
+      ) ||
+      String(m.user_id ?? m.id ?? '').slice(0, 8) ||
+      'Pending member'
     );
-
-    // Last resort: show a short id so it’s not blank
-    return label || String(m.user_id || m.id || '').slice(0, 8) || 'Pending member';
   }
+
+  const getEmail = (m) => pick(m.email, m.user?.email, m.invited_email, m.pending_email);
+  const getUsername = (m) => pick(m.username, m.user?.username);
 
   return (
     <div
@@ -92,7 +79,6 @@ export default function TeamViewerModal({
         className="bg-white w-full max-w-2xl rounded-2xl shadow-xl p-4"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* INVITE SECTION */}
         {view === 'invite' && (
           <>
             <div className="flex items-center justify-between mb-3">
@@ -116,7 +102,6 @@ export default function TeamViewerModal({
           </>
         )}
 
-        {/* TEAM SECTION */}
         {view === 'team' && (
           <>
             <div className="flex items-center justify-between mb-3">
@@ -133,29 +118,24 @@ export default function TeamViewerModal({
                   <div className="text-sm text-gray-500 p-4 text-center">No team members found</div>
                 ) : (
                   <ul className="divide-y">
-                    {members.map(member => {
+                    {members.map(m => {
+                      const id = m.user_id ?? m.id ?? m.user?.id;
+                      const email = getEmail(m);
+                      const username = getUsername(m);
                       return (
-                        <div key={member.user_id} className="flex items-center justify-between">
+                        <div key={id} className="flex items-center justify-between">
                           <div className="min-w-0 flex-1">
-                            {/* replace the display cell with email-first fallback */}
-                            <span className="truncate">
-                              {member.email || member.name || (member.user_id ? String(member.user_id).slice(0, 8) : (member.id ? String(member.id).slice(0, 8) : 'pending member'))}
-                            </span>
-
-                            {member.email && member.email.trim() && (
-                              <div className="text-xs text-gray-500 truncate mt-1">{member.email}</div>
-                            )}
-                            {member.username && member.username.trim() && member.username !== memberLabel(member) && (
-                              <div className="text-xs text-gray-400 truncate">@{member.username}</div>
-                            )}
+                            <span className="truncate">{memberLabel(m)}</span>
+                            {email && <div className="text-xs text-gray-500 truncate mt-1">{email}</div>}
+                            {username && <div className="text-xs text-gray-400 truncate">@{username}</div>}
                           </div>
 
                           <div className="flex items-center gap-2 ml-4">
                             {canManage ? (
                               <select
                                 className="border rounded px-2 py-1 text-sm min-w-[100px]"
-                                value={member.role || 'member'}
-                                onChange={(e) => onChangeRole?.(member.user_id ?? member.id ?? member.user?.id, e.target.value)}
+                                value={m.role || 'member'}
+                                onChange={(e) => onChangeRole?.(id, e.target.value)}
                               >
                                 {ROLE_OPTIONS.map(role => (
                                   <option key={role} value={role}>{role}</option>
@@ -163,14 +143,14 @@ export default function TeamViewerModal({
                               </select>
                             ) : (
                               <span className="px-2 py-1 text-sm bg-gray-100 rounded">
-                                {member.role || 'member'}
+                                {m.role || 'member'}
                               </span>
                             )}
-                            
-                            {canManage && member.role !== 'owner' && (
-                              <button 
+
+                            {canManage && m.role !== 'owner' && (
+                              <button
                                 className="px-2 py-1 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50"
-                                onClick={() => onRemoveMember?.(member.user_id ?? member.id ?? member.user?.id)}
+                                onClick={() => onRemoveMember?.(id)}
                                 title="Remove member"
                               >
                                 Remove

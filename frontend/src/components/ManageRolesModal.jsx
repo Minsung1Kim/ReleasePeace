@@ -1,14 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { apiRequest } from '../utils/api';
 
-// Adjust to your roles:
 const ROLE_OPTIONS = ["owner", "admin", "pm", "engineer", "qa", "viewer"];
 
 export default function ManageRolesModal({ open, companyId, onClose }) {
   const overlayRef = useRef(null);
   const [members, setMembers] = useState([]);
 
-  // Fetch members when modal opens
   useEffect(() => {
     if (!open || !companyId) return;
     apiRequest(`companies/${companyId}/members`, {
@@ -18,14 +16,12 @@ export default function ManageRolesModal({ open, companyId, onClose }) {
       .catch(console.error);
   }, [open, companyId]);
 
-  // Close on ESC
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose?.();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  // Close on outside click
   const handleOverlayClick = (e) => {
     if (e.target === overlayRef.current) onClose?.();
   };
@@ -37,7 +33,7 @@ export default function ManageRolesModal({ open, companyId, onClose }) {
       headers: { 'X-Company-Id': companyId }
     })
       .then(() => {
-        setMembers(m => m.map(x => x.id === userId ? { ...x, role } : x));
+        setMembers(m => m.map(x => (x.id === userId || x.user_id === userId) ? { ...x, role } : x));
       })
       .catch(console.error);
   }
@@ -47,7 +43,7 @@ export default function ManageRolesModal({ open, companyId, onClose }) {
       method: 'DELETE',
       headers: { 'X-Company-Id': companyId }
     })
-      .then(() => setMembers(m => m.filter(x => x.id !== userId)))
+      .then(() => setMembers(m => m.filter(x => (x.id ?? x.user_id) !== userId)))
       .catch(console.error);
   }
 
@@ -71,7 +67,7 @@ export default function ManageRolesModal({ open, companyId, onClose }) {
           <ul className="divide-y">
             {members.map((m) => (
               <MemberRow
-                key={m.id}
+                key={m.id ?? m.user_id}
                 member={m}
                 onChangeRole={changeRole}
                 onRemoveMember={remove}
@@ -93,89 +89,77 @@ export default function ManageRolesModal({ open, companyId, onClose }) {
   );
 }
 
-function MemberRow({
-  member,
-  onChangeRole,
-  onRemoveMember,
-}) {
+function MemberRow({ member, onChangeRole, onRemoveMember }) {
   const btnRef = useRef(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 224 }); // px
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0, width: 224 });
 
+  const id = member.user_id ?? member.id ?? member.user?.id;
+  const name =
+    member.display_name ||
+    member.name ||
+    member.user?.display_name ||
+    member.user?.name ||
+    member.username ||
+    member.user?.username ||
+    member.email ||
+    member.user?.email ||
+    String(id || '').slice(0, 8);
+  const email = member.email || member.user?.email || '';
   const isOwner = member.role === "owner";
 
   const doChangeRole = async (role) => {
     setMenuOpen(false);
-    if (!onChangeRole) return;
-    if (role === member.role) return;
-    // Prevent demoting owner via quick menu (optional rule)
-    if (member.role === "owner" && role !== "owner") {
+    if (!onChangeRole || role === member.role) return;
+    if (isOwner && role !== "owner") {
       alert("Owner cannot be changed here.");
       return;
     }
-    await onChangeRole(member.id, role);
+    await onChangeRole(id, role);
   };
 
   const doRemove = async () => {
     setMenuOpen(false);
-    if (!onRemoveMember) return;
-    if (isOwner) {
-      alert("Cannot remove current owner.");
+    if (!onRemoveMember || isOwner) {
+      if (isOwner) alert("Cannot remove current owner.");
       return;
     }
-    if (!confirm(`Remove ${member.email} from this company?`)) return;
-    await onRemoveMember(member.id);
+    if (!confirm(`Remove ${email || name} from this company?`)) return;
+    await onRemoveMember(id);
   };
 
   return (
     <li className="flex items-center justify-between gap-3 px-3 py-2">
       <div className="min-w-0">
-        <div className="text-sm font-medium truncate">
-          {member.name || member.email}
-        </div>
-        <div className="text-xs text-gray-500 truncate">{member.email}</div>
+        <div className="text-sm font-medium truncate">{name}</div>
+        {email && <div className="text-xs text-gray-500 truncate">{email}</div>}
       </div>
 
       <div className="flex items-center gap-2">
         <span className="text-xs px-2 py-1 rounded-full bg-gray-100 border">
-          {member.role}
+          {member.role || 'member'}
         </span>
 
-        {/* 3-dot menu */}
         <button
           ref={btnRef}
           type="button"
           onClick={() => {
             const r = btnRef.current.getBoundingClientRect();
-            setMenuPos({
-              top: r.bottom + 6,
-              left: r.right - 224,
-              width: 224,
-            });
-            setMenuOpen((v) => !v);
+            setMenuPos({ top: r.bottom + 6, left: r.right - 224, width: 224 });
+            setMenuOpen(v => !v);
           }}
           className="w-8 h-8 inline-flex items-center justify-center rounded-lg hover:bg-gray-100"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
         >
-          <svg
-            className="w-5 h-5"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            aria-hidden="true"
-          >
+          <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
             <path d="M10 6.5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm0 5a1.5 1.5 0 110-3 1.5 1.5 0 010 3z" />
           </svg>
         </button>
 
         {menuOpen && (
           <>
-            {/* click-away layer */}
-            <div
-              className="fixed inset-0 z-[999]"
-              onMouseDown={() => setMenuOpen(false)}
-            />
-            {/* the menu */}
+            <div className="fixed inset-0 z-[999]" onMouseDown={() => setMenuOpen(false)} />
             <div
               role="menu"
               className="fixed z-[1000] rounded-xl border bg-white shadow-xl p-1"
@@ -188,19 +172,14 @@ function MemberRow({
                 <MenuItem
                   key={r}
                   onClick={() => doChangeRole(r)}
-                  disabled={member.role === "owner" && r !== "owner"}
+                  disabled={isOwner && r !== "owner"}
                   selected={member.role === r}
                 >
-                  {member.role === r ? "✓ " : ""}
-                  {r}
+                  {member.role === r ? "✓ " : ""}{r}
                 </MenuItem>
               ))}
               <div className="my-1 border-t" />
-              {/* Transfer ownership removed for this version */}
-              <MenuItem
-                onClick={doRemove}
-                disabled={!onRemoveMember || isOwner}
-              >
+              <MenuItem onClick={doRemove} disabled={isOwner}>
                 Remove from company
               </MenuItem>
             </div>
@@ -218,9 +197,7 @@ function MenuItem({ children, onClick, disabled, selected }) {
       onClick={disabled ? undefined : onClick}
       className={[
         "w-full text-left px-3 py-2 rounded-lg text-sm",
-        disabled
-          ? "text-gray-300 cursor-not-allowed"
-          : "hover:bg-gray-100",
+        disabled ? "text-gray-300 cursor-not-allowed" : "hover:bg-gray-100",
         selected ? "font-semibold" : "",
       ].join(" ")}
       disabled={disabled}
