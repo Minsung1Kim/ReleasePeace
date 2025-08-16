@@ -15,7 +15,6 @@ const { Op, fn, col, where } = require('sequelize');
 
 // Company membership roles
 const ALLOWED_ROLES = ['owner', 'admin', 'pm', 'engineer', 'qa', 'viewer', 'member'];
-const db = require('../utils/db'); 
 
 function genCode() {
   return crypto.randomBytes(8).toString('base64url').slice(0, 12);
@@ -210,8 +209,6 @@ router.post('/:companyId/regenerate-invite',
    MEMBERSHIP MANAGEMENT
 ---------------------------- */
 
-// List members (owner/admins get full detail, others get minimal)
-// List members (join users so UI gets readable identifiers)
 router.get(
   '/:companyId/members',
   requireAuth,
@@ -220,43 +217,35 @@ router.get(
     try {
       const { companyId } = req.params;
 
-      // Confirm requester is an active member (you already did via middleware, this is just defensive)
-      const my = await db('company_members')
-        .where({ company_id: companyId, user_id: req.user.id, status: 'active' })
-        .first();
-
-      if (!my) return res.status(403).json({ error: 'Not a member of this company' });
-
-      const rows = await db('company_members as cm')
-        .leftJoin('users as u', 'u.id', 'cm.user_id')
-        .select(
-          'cm.user_id',
-          'cm.role',
-          'cm.status',
-          'u.email',
-          'u.username',
-          'u.display_name',
-          'u.name'
-        )
-        .where({ 'cm.company_id': companyId, 'cm.status': 'active' })
-        .orderByRaw(
-          `CASE WHEN cm.role='owner' THEN 0 WHEN cm.role='admin' THEN 1 ELSE 2 END, u.email NULLS LAST`
-        );
+      // Pull active memberships and join user details via Sequelize
+      const rows = await UserCompany.findAll({
+        where: { company_id: companyId, status: 'active' },
+        include: [
+          { model: User, as: 'user', attributes: ['id', 'email', 'username', 'display_name', 'name'] }
+        ],
+        order: [
+          // owners first, then admins, then others; then by email
+          [UserCompany.sequelize.literal(`CASE WHEN role='owner' THEN 0 WHEN role='admin' THEN 1 ELSE 2 END`), 'ASC'],
+          [{ model: User, as: 'user' }, 'email', 'ASC'],
+        ],
+      });
 
       const members = rows.map(r => ({
-        id: r.user_id,                // convenience
+        id: r.user_id,
         user_id: r.user_id,
         role: r.role,
         status: r.status,
-        email: r.email || null,
-        username: r.username || null,
-        display_name: r.display_name || r.name || null,
-        user: {
-          id: r.user_id,
-          email: r.email || null,
-          username: r.username || null,
-          display_name: r.display_name || r.name || null,
-        },
+        email: r.user?.email ?? null,
+        username: r.user?.username ?? null,
+        display_name: r.user?.display_name ?? r.user?.name ?? null,
+        user: r.user
+          ? {
+              id: r.user.id,
+              email: r.user.email ?? null,
+              username: r.user.username ?? null,
+              display_name: r.user.display_name ?? r.user.name ?? null,
+            }
+          : { id: r.user_id },
       }));
 
       res.json({ members });
@@ -266,6 +255,7 @@ router.get(
     }
   }
 );
+
 
 
 
