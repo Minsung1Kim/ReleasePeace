@@ -3,9 +3,7 @@
 // On Firebase auth, auto-creates/activates a DB user from token claims.
 
 const jwt = require('jsonwebtoken');
-const { User, sequelize } = require('../models');
-const { Op } = require('sequelize');
-const db = require('../utils/db'); // Knex
+const { User } = require('../models'); // use Sequelize models only
 
 let admin = null;
 function ensureFirebaseAdmin() {
@@ -94,19 +92,13 @@ async function authMiddleware(req, res, next) {
       return next();
     }
 
-    // 2) Firebase ID token path
+    // 2) Firebase ID token path (Sequelize only; no direct db() calls)
     const fb = await verifyFirebaseToken(token);
     if (fb?.uid) {
-      const uid = fb.uid;
-      const email = fb.email || null;
-
-      // Persist email so JOINs have data
-      await db('users')
-        .insert({ id: uid, email })
-        .onConflict('id')
-        .merge({ email });
-
       const user = await getOrCreateUserFromFirebase(fb);
+      if (!user || !user.is_active) {
+        return res.status(401).json({ error: 'Access denied', message: 'Invalid token' });
+      }
       req.user = user;
       return next();
     }
@@ -116,7 +108,7 @@ async function authMiddleware(req, res, next) {
     console.error('Auth middleware error:', e);
     return res.status(401).json({ error: 'Access denied', message: 'Invalid token' });
   }
-};
+}
 
 const optionalAuth = async (req, res, next) => {
   try {
@@ -134,7 +126,7 @@ const optionalAuth = async (req, res, next) => {
     const fb = await verifyFirebaseToken(token);
     if (fb?.uid) {
       const user = await getOrCreateUserFromFirebase(fb);
-      req.user = user;
+      if (user?.is_active) req.user = user;
     }
     return next();
   } catch {
