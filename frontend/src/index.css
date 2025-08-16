@@ -10,7 +10,6 @@
   letter-spacing: 0.05em;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
-
 input[type="text"],
 input[type="email"],
 input[type="password"],
@@ -37,6 +36,9 @@ textarea::placeholder { color: var(--rp-muted) !important; }
   --rp-muted: rgba(234, 231, 223, .75);
   --rp-border: rgba(249, 209, 66, .22);
   --rp-accent: rgba(249, 209, 66, .08);
+
+  /* reserve space for header (adjust if your header is taller/shorter) */
+  --rp-header-h: 72px;
 }
 
 html, body, #root { height: 100%; }
@@ -49,12 +51,17 @@ body{
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ---- layout fixes ---- */
+#root > div:first-child { padding-top: var(--rp-header-h); }  /* keep content below header */
+header, .rp-header, .topbar {
+  position: sticky; top: 0; z-index: 40; background: var(--rp-bg);
+}
+
 /* Reusable */
 .rp-card{
   background: var(--rp-card-bg);
   border: 1px solid var(--rp-border);
   border-radius: .75rem;
-  /* prevent clipping + keep content readable */
   min-height: 112px;
   display: flex;
   flex-direction: column;
