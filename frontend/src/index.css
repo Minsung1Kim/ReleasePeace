@@ -48,11 +48,10 @@ body{
   color: var(--rp-fg);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  -moz-osx-font-smoothing: grayscale; 
 }
 
 /* ---- layout fixes ---- */
-#root > div:first-child { padding-top: var(--rp-header-h); }  /* keep content below header */
 header, .rp-header, .topbar {
   position: sticky; top: 0; z-index: 40; background: var(--rp-bg);
 }
