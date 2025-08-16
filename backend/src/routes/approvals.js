@@ -1,151 +1,130 @@
 // backend/src/routes/approvals.js
 const express = require('express');
 const router = express.Router();
-const { authMiddleware } = require('../middleware/auth');
-const { Flag } = require('../models');
-const db = require('../utils/db');
-const {
-  createApproval,
-  listForFlag,
-  listPending,
-  addDecision,
-} = require('../services/approvalService');
 
-const { logAudit } = (() => {
-  try { return require('../services/auditService'); }
-  catch { return { logAudit: async () => {} }; }
+const { authMiddleware: requireAuth } = require('../middleware/auth');
+const { requireCompanyMembership } = (() => {
+  try { return require('../middleware/company'); }
+  catch { return { requireCompanyMembership: (req, _res, next) => next() }; }
 })();
+const { createApproval, listForFlag, addDecision } = require('../services/approvalService');
+const { Flag } = require('../models');
+const db = require('../utils/db'); // must expose .query
 
-// Resolve :flagIdOrKey to a Flag and expose req.flagKey
+// Resolve :flagIdOrKey to a real flag
 router.param('flagIdOrKey', async (req, res, next, val) => {
   try {
     let flag = await Flag.findByPk(val);
     if (!flag) flag = await Flag.findOne({ where: { key: val } });
-    if (!flag) return res.status(404).json({ error: 'Flag not found' });
+    if (!flag) return res.status(404).json({ error: 'flag_not_found' });
     req.flag = flag;
     req.flagKey = flag.key;
     next();
   } catch (e) { next(e); }
 });
 
-// POST /api/flags/:flagIdOrKey/approvals  -> create approval request
-router.post('/flags/:flagIdOrKey/approvals', authMiddleware, async (req, res) => {
-  try {
-    const { requiredRoles = ['QA', 'LEGAL'], requiredCount = 1 } = req.body || {};
-    const actorId = req.user?.id || req.user?.email || 'unknown';
-
-    const ap = await createApproval({
-      flagKey: req.flagKey,
-      requestedBy: actorId,
-      requiredRoles,
-      requiredCount,
-    });
-
-    await logAudit({
-      actorId,
-      action: 'APPROVAL_REQUESTED',
-      entityType: 'approval',
-      entityId: String(ap.id),
-      payload: { flagKey: req.flagKey, requiredRoles, requiredCount },
-    });
-
-    res.status(201).json(ap);
-  } catch (e) {
-    console.error('create approval error:', e);
-    res.status(500).json({ error: 'failed_to_create_approval' });
+// CREATE approval request for a flag
+// UI calls: POST /api/flags/:flagIdOrKey/approvals
+router.post('/:flagIdOrKey/approvals',
+  requireAuth,
+  requireCompanyMembership,
+  async (req, res, next) => {
+    try {
+      const { requiredRoles = [], requiredCount = 1, note } = req.body || {};
+      const actorId = req.user?.id || req.user?.email || 'unknown';
+      const approval = await createApproval({
+        flagKey: req.flagKey,
+        requiredRoles,
+        requiredCount,
+        requestedBy: actorId,
+        note: note || null,
+      });
+      res.status(201).json(approval);
+    } catch (err) { next(err); }
   }
-});
+);
 
-// GET /api/flags/:flagIdOrKey/approvals  -> list approvals for one flag
-router.get('/flags/:flagIdOrKey/approvals', authMiddleware, async (req, res, next) => {
-  try {
-    const rows = await listForFlag(req.flagKey);
-    res.json(rows);
-  } catch (e) { next(e); }
-});
-
-// GET /api/approvals/pending  -> pending for company (or all)
-router.get('/approvals/pending', authMiddleware, async (req, res) => {
-  try {
-    const companyId = req.get('X-Company-Id') || req.query.companyId || null;
-    const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 200);
-    const rows = await listPending({ companyId, limit });
-    // respond with multiple keys so different UIs can consume
-    res.json({ pending: rows, approvals: rows, items: rows, data: rows });
-  } catch (e) {
-    console.error('GET /approvals/pending failed:', e);
-    res.status(500).json({ error: 'failed_to_list_pending' });
+// LIST approvals attached to a flag
+// UI calls: GET /api/flags/:flagIdOrKey/approvals
+router.get('/:flagIdOrKey/approvals',
+  requireAuth,
+  requireCompanyMembership,
+  async (req, res, next) => {
+    try {
+      const list = await listForFlag(req.flagKey);
+      res.json(list);
+    } catch (err) { next(err); }
   }
-});
+);
 
-// Backward-compat alias used by some panels
-router.get('/approvals/recent', authMiddleware, async (req, res) => {
-  try {
-    const companyId = req.get('X-Company-Id') || req.query.companyId || null;
-    const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 200);
-    const rows = await listPending({ companyId, limit });
-    res.json({ pending: rows, approvals: rows, items: rows, data: rows });
-  } catch (e) {
-    console.error('GET /approvals/recent failed:', e);
-    res.status(500).json({ error: 'failed_to_list_recent' });
+// DECIDE on an approval (approve / reject)
+// UI calls: PATCH /api/flags/:flagIdOrKey/approvals/:approvalId
+router.patch('/:flagIdOrKey/approvals/:approvalId',
+  requireAuth,
+  requireCompanyMembership,
+  async (req, res, next) => {
+    try {
+      const id = req.params.approvalId;
+      const raw = String(req.body?.status || '').toLowerCase(); // 'approved' | 'rejected'
+      const decision = raw === 'approved' ? 'approve' : raw === 'rejected' ? 'reject' : null;
+      if (!decision) return res.status(400).json({ error: 'invalid_status' });
+
+      const role = String(req.membership?.role || req.body?.role || '').toLowerCase();
+      if (!role) return res.status(400).json({ error: 'missing_role' });
+
+      const comment = req.body?.comments || req.body?.comment || null;
+      const actorId = req.user?.id || req.user?.email || 'unknown';
+
+      const updated = await addDecision({ id, actorId, role, decision, comment });
+      if (!updated) return res.status(404).json({ error: 'not_found' });
+      res.json(updated);
+    } catch (err) { next(err); }
   }
-});
+);
 
-// Legacy array endpoint some dashboards call
-router.get('/flags/approvals/pending', authMiddleware, async (req, res) => {
-  try {
-    const companyId = req.get('X-Company-Id') || req.query.companyId || null;
-    const rows = await listPending({ companyId, limit: 200 });
-    res.json(rows);
-  } catch (e) {
-    console.error('GET /flags/approvals/pending failed:', e);
-    res.status(500).json({ error: 'failed_to_list_pending' });
+// GLOBAL pending approvals (what the current member can act on)
+// UI calls: GET /api/flags/approvals/pending?limit=100
+router.get('/approvals/pending',
+  requireAuth,
+  requireCompanyMembership,
+  async (req, res, next) => {
+    try {
+      const limit = Math.max(1, Math.min(200, parseInt(req.query.limit, 10) || 50));
+      const companyId = req.company?.id || req.companyId || req.header('x-company-id');
+      const myRole = String(req.membership?.role || '').toLowerCase();
+      const myUserId = String(req.user?.id);
+
+      if (!companyId) return res.status(400).json({ error: 'missing_company' });
+      if (!myRole) return res.status(400).json({ error: 'missing_role' });
+
+      // Approvals for flags in this company, still 'pending',
+      // where my role is required and I haven't already decided.
+      const { rows } = await db.query(
+        `
+        SELECT ap.*,
+               jsonb_build_object('id', f.id, 'key', f.key, 'name', f.name) AS flag,
+               jsonb_build_object('id', u.id, 'email', u.email, 'username', u.username, 'display_name', u.display_name) AS requester
+        FROM approvals ap
+          JOIN flags f ON f.key = ap.flag_key
+          LEFT JOIN users u ON u.id = ap.requested_by
+        WHERE f.company_id = $1
+          AND ap.status = 'pending'
+          AND $2 = ANY(ap.required_roles)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(ap.decisions) d
+            WHERE (d->>'actorId') = $3
+          )
+        ORDER BY ap.created_at DESC
+        LIMIT $4
+        `,
+        [companyId, myRole, myUserId, limit]
+      );
+
+      // Dashboard.jsx expects { pending: [...] }
+      res.json({ pending: rows });
+    } catch (err) { next(err); }
   }
-});
-
-// POST /api/approvals/:id/decision  -> approve/reject
-router.post('/approvals/:id/decision', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { decision, role, comment } = req.body || {};
-    const d = String(decision || '').toLowerCase();
-    if (!['approve', 'reject'].includes(d)) return res.status(400).json({ error: 'invalid_decision' });
-
-    const actorId = req.user?.id || req.user?.email || 'unknown';
-    const updated = await addDecision({ id, actorId, role, decision: d, comment });
-    if (!updated) return res.status(404).json({ error: 'not_found' });
-
-    await logAudit({
-      actorId,
-      action: 'APPROVAL_DECIDED',
-      entityType: 'approval',
-      entityId: String(id),
-      payload: { decision: d, role, comment, status: updated.status },
-    });
-
-    res.json(updated);
-  } catch (e) {
-    console.error('POST /approvals/:id/decision failed:', e);
-    res.status(500).json({ error: 'failed_to_update_approval' });
-  }
-});
-
-// PATCH /api/flags/:flagId/approvals/:id  -> legacy: status -> decision
-router.patch('/flags/:flagId/approvals/:id', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const s = String(req.body?.status || '').toLowerCase();
-    const decision = s === 'approved' ? 'approve' : s === 'rejected' ? 'reject' : null;
-    if (!decision) return res.status(400).json({ error: 'invalid_status' });
-
-    const actorId = req.user?.id || req.user?.email || 'unknown';
-    const updated = await addDecision({ id, actorId, decision, comment: req.body?.comment });
-    if (!updated) return res.status(404).json({ error: 'not_found' });
-    res.json(updated);
-  } catch (e) {
-    console.error('PATCH legacy decision failed:', e);
-    res.status(500).json({ error: 'failed_to_update_approval' });
-  }
-});
+);
 
 module.exports = router;
