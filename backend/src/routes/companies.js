@@ -3,7 +3,6 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 
-
 const { requireAuth } = require('../middleware/auth');
 
 const {
@@ -16,6 +15,7 @@ const { Op, fn, col, where } = require('sequelize');
 
 // Company membership roles
 const ALLOWED_ROLES = ['owner', 'admin', 'pm', 'engineer', 'qa', 'viewer', 'member'];
+const db = require('../utils/db'); 
 
 function genCode() {
   return crypto.randomBytes(8).toString('base64url').slice(0, 12);
@@ -211,18 +211,63 @@ router.post('/:companyId/regenerate-invite',
 ---------------------------- */
 
 // List members (owner/admins get full detail, others get minimal)
+// List members (join users so UI gets readable identifiers)
 router.get(
   '/:companyId/members',
   requireAuth,
   requireCompanyMembership,
   async (req, res, next) => {
     try {
-      const full = ['owner','admin'].includes(String(req.membership.role).toLowerCase());
-      const members = await req.company.getMembers?.({ full });
+      const { companyId } = req.params;
+
+      // Confirm requester is an active member (you already did via middleware, this is just defensive)
+      const my = await db('company_members')
+        .where({ company_id: companyId, user_id: req.user.id, status: 'active' })
+        .first();
+
+      if (!my) return res.status(403).json({ error: 'Not a member of this company' });
+
+      const rows = await db('company_members as cm')
+        .leftJoin('users as u', 'u.id', 'cm.user_id')
+        .select(
+          'cm.user_id',
+          'cm.role',
+          'cm.status',
+          'u.email',
+          'u.username',
+          'u.display_name',
+          'u.name'
+        )
+        .where({ 'cm.company_id': companyId, 'cm.status': 'active' })
+        .orderByRaw(
+          `CASE WHEN cm.role='owner' THEN 0 WHEN cm.role='admin' THEN 1 ELSE 2 END, u.email NULLS LAST`
+        );
+
+      const members = rows.map(r => ({
+        id: r.user_id,                // convenience
+        user_id: r.user_id,
+        role: r.role,
+        status: r.status,
+        email: r.email || null,
+        username: r.username || null,
+        display_name: r.display_name || r.name || null,
+        user: {
+          id: r.user_id,
+          email: r.email || null,
+          username: r.username || null,
+          display_name: r.display_name || r.name || null,
+        },
+      }));
+
       res.json({ members });
-    } catch (e) { next(e); }
+    } catch (e) {
+      console.error('GET company members error:', e);
+      next(e);
+    }
   }
 );
+
+
 
 // Invite code (fetch) – allow owners/admins to view
 router.get(
