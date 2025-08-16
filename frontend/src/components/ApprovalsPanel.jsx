@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../utils/api';
 
-export default function ApprovalsPanel({ role = 'QA' }) {
-  const [flagKey, setFlagKey] = useState('');
+export default function ApprovalsPanel({ onClose, role = 'QA' }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -10,19 +9,16 @@ export default function ApprovalsPanel({ role = 'QA' }) {
   const companyId = localStorage.getItem('rp_company_id') || '';
 
   async function load() {
-    if (!flagKey) {
-      setItems([]);
-      return;
-    }
     setLoading(true);
     setErr('');
     try {
-      const ts = Date.now(); // cache-buster to avoid 304 w/ empty body
+      const ts = Date.now(); // cache buster so we don't get 304 with empty body
       const data = await apiRequest(
-        `flags/${encodeURIComponent(flagKey)}/approvals?t=${ts}`,
-        { headers: companyId ? { 'X-Company-Id': companyId } : {} }
+        `approvals/recent?status=pending&t=${ts}`,
+        { headers: companyId ? { 'X-Company-Id': companyId, 'Cache-Control': 'no-cache' } : {} }
       );
-      setItems(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : (data?.approvals || []);
+      setItems(list);
     } catch (e) {
       setErr(e?.message || 'Failed to load approvals');
       setItems([]);
@@ -31,7 +27,7 @@ export default function ApprovalsPanel({ role = 'QA' }) {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [flagKey]);
+  useEffect(() => { load(); }, []); // load on open
 
   async function decide(id, decision) {
     try {
@@ -47,21 +43,14 @@ export default function ApprovalsPanel({ role = 'QA' }) {
   }
 
   return (
-    <div style={{ border:'1px solid #333', borderRadius:12, padding:12, minWidth: 380 }}>
+    <div style={{ border:'1px solid #333', borderRadius:12, padding:12, minWidth:420 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
-        <div style={{ fontWeight:600 }}>Pending Approvals ({role})</div>
+        <div style={{ fontWeight:600 }}>Pending Approvals</div>
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={load}>Refresh</button>
-          {/* Close button is provided by parent modal in your app */}
+          <button onClick={onClose}>Close</button>
         </div>
       </div>
-
-      <input
-        placeholder="flag key (e.g., new_payment_flow)"
-        value={flagKey}
-        onChange={(e) => setFlagKey(e.target.value)}
-        style={{ padding:8, borderRadius:8, border:'1px solid #444', width:'100%', marginBottom:12 }}
-      />
 
       {err && <div style={{ color:'#e66', marginBottom:8, fontSize:12 }}>{err}</div>}
 
@@ -75,14 +64,19 @@ export default function ApprovalsPanel({ role = 'QA' }) {
             <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
               <div>
                 <div style={{ fontWeight:600 }}>
-                  #{a.id} • {a.flag_key}
+                  #{a.id} • {a.flag_key || a.flagId || 'unknown-flag'}
                 </div>
                 <div style={{ fontSize:12, opacity:.8 }}>
-                  status: {a.status}
+                  status: {a.status || 'pending'}
                   {Array.isArray(a.required_roles) && (
                     <> • required: {a.required_roles.join(', ')} ({a.required_count || 1})</>
                   )}
                 </div>
+                {a.requested_by && (
+                  <div style={{ fontSize:12, opacity:.8 }}>
+                    requested by: {a.requested_by_email || a.requested_by}
+                  </div>
+                )}
               </div>
               <div style={{ display:'flex', gap:8 }}>
                 <button onClick={() => decide(a.id, 'approve')}>Approve</button>
