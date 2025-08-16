@@ -293,18 +293,27 @@ router.post(
 // Change a member's role (not owner)
 router.patch('/:companyId/members/:userId/role',
   requireAuth,
-  requireRole('admin', 'owner'),
+  requireCompanyMembership,            
+  requireRole(['owner', 'admin']),   
   async (req, res, next) => {
     try {
       const { companyId, userId } = req.params;
       const { role } = req.body;
 
-      if (!ALLOWED_ROLES.includes(role)) return res.status(400).json({ error: 'invalid role', allowed: ALLOWED_ROLES });
-      if (role === 'owner') return res.status(400).json({ error: 'Use POST /ownership to transfer ownership' });
+      if (!ALLOWED_ROLES.includes(role)) {
+        return res.status(400).json({ error: 'invalid role', allowed: ALLOWED_ROLES });
+      }
+      if (role === 'owner') {
+        return res.status(400).json({ error: 'Use POST /ownership to transfer ownership' });
+      }
 
-      const membership = await UserCompany.findOne({ where: { company_id: companyId, user_id: userId, status: 'active' } });
+      const membership = await UserCompany.findOne({
+        where: { company_id: companyId, user_id: userId, status: 'active' }
+      });
       if (!membership) return res.status(404).json({ error: 'member not found' });
-      if (membership.role === 'owner') return res.status(400).json({ error: 'Owner cannot be changed here. Use ownership transfer.' });
+      if (membership.role === 'owner') {
+        return res.status(400).json({ error: 'Owner cannot be changed here. Use ownership transfer.' });
+      }
 
       await membership.update({ role });
       res.json({ ok: true });
@@ -345,15 +354,21 @@ router.post('/:companyId/ownership',
 // Remove a member (not the current owner)
 router.delete('/:companyId/members/:userId',
   requireAuth,
-  requireRole('admin', 'owner'),
+  requireCompanyMembership,            // <-- add this
+  requireRole(['owner', 'admin']),     // <-- use array form
   async (req, res, next) => {
     try {
       const { companyId, userId } = req.params;
+
       const company = await Company.findByPk(companyId);
       if (!company) return res.status(404).json({ error: 'company not found' });
-      if (userId === company.owner_id) return res.status(400).json({ error: 'cannot remove current owner' });
+      if (userId === company.owner_id) {
+        return res.status(400).json({ error: 'cannot remove current owner' });
+      }
 
-      const membership = await UserCompany.findOne({ where: { company_id: companyId, user_id: userId, status: 'active' } });
+      const membership = await UserCompany.findOne({
+        where: { company_id: companyId, user_id: userId, status: 'active' }
+      });
       if (!membership) return res.status(404).json({ error: 'member not found' });
 
       await membership.update({ status: 'inactive' });
@@ -361,5 +376,6 @@ router.delete('/:companyId/members/:userId',
     } catch (err) { next(err); }
   }
 );
+
 
 module.exports = router;
