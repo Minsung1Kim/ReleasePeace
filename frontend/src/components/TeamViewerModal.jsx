@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getAuth } from "firebase/auth";
 import { apiRequest } from "../utils/api";
 
 const ROLE_OPTIONS = ["owner", "admin", "pm", "engineer", "qa", "legal", "member"];
@@ -8,28 +7,19 @@ export default function TeamViewerModal({
   open,
   onClose,
   companyId,
-  view = "team",           // keep support for 'invite' if you use it elsewhere
   canManage = false,
-  // legacy props (still supported but we now fetch fresh data)
-  members: initialMembers = [],
-  loading: initialLoading = false,
-  error: initialError = "",
-  // optional callbacks (we provide safe defaults if not passed)
-  onChangeRole,
-  onRemoveMember,
+  view = "team",
   inviteCode = "",
   onLoadInvite,
   onRegenerateInvite,
   copyInvite,
 }) {
   const overlayRef = useRef(null);
-  const auth = getAuth();
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const [members, setMembers] = useState(initialMembers);
-  const [loading, setLoading] = useState(initialLoading);
-  const [error, setError] = useState(initialError);
-
-  // Fresh fetch whenever modal opens for a company
+  // Fetch fresh members whenever the modal opens for a company
   useEffect(() => {
     if (!open || !companyId || view !== "team") return;
     let cancelled = false;
@@ -48,38 +38,22 @@ export default function TeamViewerModal({
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [open, companyId, view]);
 
-  // Preserve existing invite-code behavior when view === 'invite'
+  // Keep invite code behavior intact when view === 'invite'
   useEffect(() => {
     if (open && view === "invite") onLoadInvite?.();
   }, [open, view, onLoadInvite]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e) => e.key === "Escape" && onClose?.();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
   if (!open) return null;
 
-  const handleBackdrop = (e) => {
-    if (e.target === overlayRef.current) onClose?.();
-  };
+  const handleBackdrop = (e) => { if (e.target === overlayRef.current) onClose?.(); };
+  const pick = (...vals) => vals.find(v => typeof v === "string" && v.trim() && !/^unknown/i.test(v));
 
-  const pick = (...vals) => vals.find((v) => typeof v === "string" && v.trim() && !/^unknown/i.test(v));
-
+  // Build a label strictly from the member data (no “current user” override)
   function memberLabel(m) {
     const u = m?.user || {};
-    const me = auth.currentUser;
-    if (String(m.role).toLowerCase() === "owner" && me) {
-      const mine = pick(me.displayName, me.email);
-      if (mine) return mine;
-    }
     return (
       pick(
         m.display_name, m.displayName, m.name,
@@ -89,45 +63,38 @@ export default function TeamViewerModal({
         m.invited_email, m.pending_email
       ) ||
       String(m.user_id ?? m.id ?? "").slice(0, 8) ||
-      "Pending member"
+      "Member"
     );
   }
 
-  // Safe defaults if parent didn’t provide handlers
-  const changeRole = async (userId, role) => {
+  async function changeRole(userId, role) {
     try {
-      if (onChangeRole) {
-        await onChangeRole(userId, role);
-      } else {
-        await apiRequest(`/companies/${companyId}/members/${userId}/role`, {
-          method: "PATCH",
-          headers: { "X-Company-Id": companyId },
-          body: { role },
-        });
-      }
-      setMembers((prev) =>
-        prev.map((m) => (m.user_id === userId || m.id === userId || m.user?.id === userId ? { ...m, role } : m))
-      );
+      await apiRequest(`/companies/${companyId}/members/${userId}/role`, {
+        method: "PATCH",
+        headers: { "X-Company-Id": companyId },
+        body: { role },
+      });
+      setMembers(prev => prev.map(m =>
+        (m.user_id === userId || m.id === userId || m.user?.id === userId)
+          ? { ...m, role }
+          : m
+      ));
     } catch (e) {
       alert(e?.message || "Failed to update role");
     }
-  };
+  }
 
-  const removeMember = async (userId) => {
+  async function removeMember(userId) {
     try {
-      if (onRemoveMember) {
-        await onRemoveMember(userId);
-      } else {
-        await apiRequest(`/companies/${companyId}/members/${userId}`, {
-          method: "DELETE",
-          headers: { "X-Company-Id": companyId },
-        });
-      }
-      setMembers((prev) => prev.filter((m) => (m.user_id ?? m.id ?? m.user?.id) !== userId));
+      await apiRequest(`/companies/${companyId}/members/${userId}`, {
+        method: "DELETE",
+        headers: { "X-Company-Id": companyId },
+      });
+      setMembers(prev => prev.filter(m => (m.user_id ?? m.id ?? m.user?.id) !== userId));
     } catch (e) {
       alert(e?.message || "Failed to remove member");
     }
-  };
+  }
 
   const InviteView = () => (
     <>
@@ -188,14 +155,11 @@ export default function TeamViewerModal({
                       value={m.role || "member"}
                       onChange={(e) => changeRole(id, e.target.value)}
                     >
-                      {ROLE_OPTIONS.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
+                      {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   ) : (
                     <span className="px-2 py-1 text-sm bg-gray-100 rounded">{m.role || "member"}</span>
                   )}
-
                   {canManage && m.role !== "owner" && (
                     <button
                       className="px-2 py-1 border border-red-300 text-red-600 rounded text-xs hover:bg-red-50"
