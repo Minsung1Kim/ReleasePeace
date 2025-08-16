@@ -4,27 +4,6 @@ const router = express.Router();
 const { authMiddleware: requireAuth } = require('../middleware/auth');
 const db = require('../utils/db'); // Knex
 
-// GET /api/companies/:companyId/members
-router.get('/companies/:companyId/members', requireAuth, async (req, res) => {
-  try {
-    const { companyId } = req.params;
-
-    const rows = await db('company_members as m')
-      .leftJoin('users as u', 'u.id', 'm.user_id')
-      .select(
-        'm.user_id as id',
-        'm.role',
-        'u.email as email',
-        'u.name as name'
-      )
-      .where('m.company_id', companyId);
-
-    return res.json({ members: rows });
-  } catch (err) {
-    console.error('GET /companies/:companyId/members error:', err);
-    return res.status(500).json({ error: 'Failed to fetch members' });
-  }
-});
 
 // PATCH /api/companies/:companyId/members/:userId/role
 router.patch('/companies/:companyId/members/:userId/role', requireAuth, async (req, res) => {
