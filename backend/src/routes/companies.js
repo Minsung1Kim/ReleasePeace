@@ -205,9 +205,6 @@ router.post('/:companyId/regenerate-invite',
   }
 );
 
-/* ---------------------------
-   MEMBERSHIP MANAGEMENT
----------------------------- */
 
 router.get(
   '/:companyId/members',
@@ -221,7 +218,8 @@ router.get(
       const rows = await UserCompany.findAll({
         where: { company_id: companyId, status: 'active' },
         include: [
-          { model: User, as: 'user', attributes: ['id', 'email', 'username', 'display_name', 'name'] }
+          // NOTE: only select fields that actually exist in your users table
+          { model: User, as: 'user', attributes: ['id', 'email', 'username', 'display_name'] }
         ],
         order: [
           // owners first, then admins, then others; then by email
@@ -237,13 +235,13 @@ router.get(
         status: r.status,
         email: r.user?.email ?? null,
         username: r.user?.username ?? null,
-        display_name: r.user?.display_name ?? r.user?.name ?? null,
+        display_name: r.user?.display_name ?? null,
         user: r.user
           ? {
               id: r.user.id,
               email: r.user.email ?? null,
               username: r.user.username ?? null,
-              display_name: r.user.display_name ?? r.user.name ?? null,
+              display_name: r.user.display_name ?? null,
             }
           : { id: r.user_id },
       }));
