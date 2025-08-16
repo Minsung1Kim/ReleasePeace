@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const NodeCache = require('node-cache');
+const approvalsRouter = require('./routes/approvals');
 require('dotenv').config();
 
 
@@ -299,8 +300,6 @@ app.use('/api/flags', require('./routes/flags'));
 app.use('/api/companies', require('./routes/companies'));
 app.use('/api/flags', approvalsRouter);
 app.use('/api', require('./routes/approvals'));
-const approvalsRouter = require('./routes/approvals');
-app.use('/api/flags', approvalsRouter);
 
 // ---------- MOCKS (only if explicitly enabled) ----------
 if (process.env.MOCK_API === '1') {
