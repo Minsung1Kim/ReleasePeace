@@ -214,21 +214,24 @@ router.get(
     try {
       const { companyId } = req.params;
 
-      // Pull active memberships and join user details via Sequelize
       const rows = await UserCompany.findAll({
         where: { company_id: companyId, status: 'active' },
         include: [
-          // NOTE: only select fields that actually exist in your users table
           { model: User, as: 'user', attributes: ['id', 'email', 'username', 'display_name'] }
         ],
+        // IMPORTANT: qualify "role" with the table alias to avoid ambiguity
         order: [
-          // owners first, then admins, then others; then by email
-          [UserCompany.sequelize.literal(`CASE WHEN role='owner' THEN 0 WHEN role='admin' THEN 1 ELSE 2 END`), 'ASC'],
+          [
+            UserCompany.sequelize.literal(
+              `CASE WHEN "UserCompany"."role"='owner' THEN 0 WHEN "UserCompany"."role"='admin' THEN 1 ELSE 2 END`
+            ),
+            'ASC'
+          ],
           [{ model: User, as: 'user' }, 'email', 'ASC'],
         ],
       });
 
-      const members = rows.map(r => ({
+      let members = rows.map(r => ({
         id: r.user_id,
         user_id: r.user_id,
         role: r.role,
@@ -246,6 +249,14 @@ router.get(
           : { id: r.user_id },
       }));
 
+      // Safety: if DB ordering gets ignored in some environments, sort in JS
+      const roleRank = { owner: 0, admin: 1 };
+      members.sort(
+        (a, b) =>
+          (roleRank[a.role] ?? 2) - (roleRank[b.role] ?? 2) ||
+          (a.email || '').localeCompare(b.email || '')
+      );
+
       res.json({ members });
     } catch (e) {
       console.error('GET company members error:', e);
@@ -253,8 +264,6 @@ router.get(
     }
   }
 );
-
-
 
 
 // Invite code (fetch) – allow owners/admins to view
