@@ -9,6 +9,14 @@ require('dotenv').config();
 
 
 const app = express();
+app.set('etag', false);
+const noCache = (req, res, next) => {
+  res.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+};
+app.use('/api', noCache);
 const PORT = process.env.PORT || 5000;
 
 

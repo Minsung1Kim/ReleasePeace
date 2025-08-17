@@ -22,26 +22,53 @@ function genCode() {
 
 
 
-// List companies for current user (must be before "/:companyId")
 router.get('/mine', requireAuth, async (req, res, next) => {
   try {
-    const rows = await UserCompany.findAll({
-      where: { user_id: req.user.id, status: 'active' },
-      include: [{ model: Company, as: 'company', attributes: ['id', 'name', 'subdomain', 'plan', 'is_active'] }],
-      order: [['joined_at', 'DESC']],
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'Surrogate-Control': 'no-store',
     });
 
-    const companies = rows.map(rc => ({
-      id: rc.company.id,
-      name: rc.company.name,
-      subdomain: rc.company.subdomain,
-      plan: rc.company.plan,
-      is_active: rc.company.is_active,
-      role: rc.role,
-    }));
+    const rows = await UserCompany.findAll({
+      where: { user_id: req.user.id, status: 'active' },
+      include: [
+        {
+          model: Company,
+          as: 'company',
+          attributes: ['id', 'name', 'subdomain', 'plan', 'is_active'],
+        },
+      ],
+      // good defaults; falls back to company name for stable order
+      order: [
+        ['joined_at', 'DESC'],
+        [{ model: Company, as: 'company' }, 'name', 'ASC'],
+      ],
+    });
 
-    res.json({ success: true, companies });
-  } catch (err) { next(err); }
+    // normalize + de-duplicate just in case
+    const seen = new Set();
+    const companies = [];
+    for (const rc of rows) {
+      if (!rc.company) continue;
+      if (seen.has(rc.company.id)) continue;
+      seen.add(rc.company.id);
+      companies.push({
+        id: rc.company.id,
+        name: rc.company.name,
+        subdomain: rc.company.subdomain,
+        plan: rc.company.plan,
+        is_active: rc.company.is_active,
+        role: rc.role,
+      });
+    }
+
+    return res.status(200).json({ success: true, companies });
+  } catch (err) {
+    console.error('GET /api/companies/mine error:', err);
+    next(err);
+  }
 });
 
 // Create a new company; creator becomes owner
