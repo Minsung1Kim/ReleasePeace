@@ -98,31 +98,37 @@ const LandingPage = ({ onEnterApp }) => {
           <h2>Core.Features</h2>
           <div className="feature-grid">
             <div className="feature-card">
-              <h3>Neural Flags</h3>
-              <p>AI-powered feature flag management with intelligent rollout strategies and automated risk assessment.</p>
+              <h3>Flags you can trust</h3>
+              <p>Toggle code without redeploys. Tag, search, and cleanly remove flags once the rollout is done.</p>
             </div>
+
             <div className="feature-card">
-              <h3>Quantum Governance</h3>
-              <p>Enterprise-grade approval workflows with role-based access control and audit trails.</p>
+              <h3>Progressive rollout</h3>
+              <p>Ramp from 1% → 100% per environment with instant rollback if anything looks off.</p>
             </div>
+
             <div className="feature-card">
-              <h3>Real-time Analytics</h3>
-              <p>Live monitoring of flag performance with business impact metrics and error tracking.</p>
+              <h3>Safety switches</h3>
+              <p>Automatic kill-switches on error spikes or latency thresholds to protect customers.</p>
             </div>
+
             <div className="feature-card">
-              <h3>Circuit Breakers</h3>
-              <p>Automated flag disabling when error thresholds are exceeded to protect your systems.</p>
+              <h3>Targeting & segments</h3>
+              <p>Enable by user, cohort, region, device, or custom rules—no code changes required.</p>
             </div>
+
             <div className="feature-card">
-              <h3>Multi-Environment</h3>
-              <p>Seamless deployment across development, staging, and production environments.</p>
+              <h3>Approvals & audit</h3>
+              <p>Optional two-step approvals for production plus a complete who/what/when trail.</p>
             </div>
+
             <div className="feature-card">
-              <h3>SDK Integration</h3>
-              <p>Fast, cached flag evaluation APIs with SDKs for JavaScript, Python, and more.</p>
+              <h3>SDKs & edge cache</h3>
+              <p>Fast evaluations via JS/Python SDKs and a REST API—single-digit ms from the edge.</p>
             </div>
           </div>
         </section>
+
         
         <section className="terminal">
           <div className="terminal-header">
