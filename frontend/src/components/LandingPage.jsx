@@ -97,35 +97,36 @@ const LandingPage = ({ onEnterApp }) => {
           <h2>Core.Features</h2>
           <div className="feature-grid">
             <div className="feature-card">
-              <h3>Flags you can trust</h3>
-              <p>Toggle code without redeploys. Tag, search, and cleanly remove flags once the rollout is done.</p>
+              <h3>Feature Flags</h3>
+              <p>Create and manage flags for safer rollouts across your app.</p>
             </div>
 
             <div className="feature-card">
-              <h3>Progressive rollout</h3>
-              <p>Ramp from 1% → 100% per environment with instant rollback if anything looks off.</p>
+              <h3>Approvals</h3>
+              <p>Built-in review flow so risky changes need a second set of eyes.</p>
             </div>
 
             <div className="feature-card">
-              <h3>Safety switches</h3>
-              <p>Automatic kill-switches on error spikes or latency thresholds to protect customers.</p>
+              <h3>Real-time Insights</h3>
+              <p>See flag status and risk at a glance while you ship.</p>
             </div>
 
             <div className="feature-card">
-              <h3>Targeting & segments</h3>
-              <p>Enable by user, cohort, region, device, or custom rules—no code changes required.</p>
+              <h3>Audit Trail</h3>
+              <p>Every toggle and approval is recorded for compliance and rollbacks.</p>
             </div>
 
             <div className="feature-card">
-              <h3>Approvals & audit</h3>
-              <p>Optional two-step approvals for production plus a complete who/what/when trail.</p>
+              <h3>Multi-Environment</h3>
+              <p>Dev, staging, production—manage them side-by-side.</p>
             </div>
 
             <div className="feature-card">
-              <h3>SDKs & edge cache</h3>
-              <p>Fast evaluations via JS/Python SDKs and a REST API—single-digit ms from the edge.</p>
+              <h3>SDK & Caching</h3>
+              <p>Fast evaluations with a simple SDK and edge-friendly caching.</p>
             </div>
           </div>
+
         </section>
 
         
