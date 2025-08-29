@@ -96,7 +96,7 @@ const LandingPage = ({ onEnterApp }) => {
         <section className="features" id="features">
           <h2>Core.Features</h2>
           <div className="feature-grid">
-            <div className="feature-card">
+            <div className="feature-card"> 
               <h3>Feature Flags</h3>
               <p>Create and manage flags for safer rollouts across your app.</p>
             </div>
